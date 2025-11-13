@@ -30,6 +30,68 @@ public class PublicController : ControllerBase
         _logger = logger;
     }
 
+    [HttpGet("tenants")]
+    public async Task<ActionResult<IEnumerable<object>>> GetTenantsActivos()
+    {
+        try
+        {
+            var tenants = await _context.Tenants
+                .Where(t => t.Status == TenantStatus.Active || t.Status == TenantStatus.Trial)
+                .OrderBy(t => t.Nombre)
+                .Select(t => new
+                {
+                    id = t.Id,
+                    nombre = t.Nombre,
+                    subdomain = t.Subdominio,
+                    email = t.Email,
+                    telefono = t.Telefono
+                })
+                .ToListAsync();
+
+            return Ok(tenants);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener tenants activos");
+            return StatusCode(500, new { message = "Error al obtener consultorios" });
+        }
+    }
+
+    [HttpGet("verificar-subdomain")]
+    public async Task<ActionResult> VerificarSubdomain([FromQuery] string subdomain)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(subdomain))
+            {
+                return BadRequest(new { message = "El subdomain es requerido" });
+            }
+
+            var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain);
+            
+            if (tenant == null || !tenant.Activo)
+            {
+                return Ok(new 
+                { 
+                    existe = false, 
+                    message = "Subdomain no encontrado o inactivo" 
+                });
+            }
+
+            return Ok(new 
+            { 
+                existe = true, 
+                nombre = tenant.Nombre,
+                subdomain = tenant.Subdominio
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al verificar subdomain");
+            return StatusCode(500, new { message = "Error al verificar subdomain" });
+        }
+    }
+
     [HttpGet("horarios-disponibles")]
     public async Task<ActionResult<IEnumerable<DateTime>>> GetHorariosDisponibles(
         [FromQuery] string subdomain,
