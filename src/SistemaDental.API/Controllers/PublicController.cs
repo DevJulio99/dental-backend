@@ -150,6 +150,7 @@ public class PublicController : ControllerBase
                     TenantId = tenant.Id,
                     FirstName = firstName,
                     LastName = lastName,
+                    TipoDocumento = dto.TipoDocumento ?? "DNI",
                     DniPasaporte = dto.DniPasaporte,
                     FechaNacimiento = dto.FechaNacimiento,
                     Telefono = dto.Telefono,
@@ -266,6 +267,7 @@ public class PublicController : ControllerBase
 public class CitaPublicCreateDto
 {
     public string NombreCompleto { get; set; } = string.Empty;
+    public string? TipoDocumento { get; set; } = "DNI";
     public string DniPasaporte { get; set; } = string.Empty;
     public DateTime FechaNacimiento { get; set; }
     public string Telefono { get; set; } = string.Empty;

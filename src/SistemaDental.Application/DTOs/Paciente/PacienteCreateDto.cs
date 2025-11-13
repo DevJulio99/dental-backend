@@ -15,12 +15,24 @@ public class PacienteCreateDto
             LastName = parts.Length > 1 ? parts[1] : string.Empty;
         }
     }
+    public string TipoDocumento { get; set; } = "DNI";
     public string DniPasaporte { get; set; } = string.Empty;
     public DateTime FechaNacimiento { get; set; }
+    public string? Genero { get; set; }
     public string Telefono { get; set; } = string.Empty;
+    public string? TelefonoAlternativo { get; set; }
     public string? Email { get; set; }
     public string? Direccion { get; set; }
+    public string? Ciudad { get; set; }
+    public string? TipoSangre { get; set; }
     public string? Alergias { get; set; }
+    public string? CondicionesMedicas { get; set; }
+    public string? MedicamentosActuales { get; set; }
+    public string? ContactoEmergenciaNombre { get; set; }
+    public string? ContactoEmergenciaTelefono { get; set; }
+    public string? SeguroDental { get; set; }
+    public string? NumeroSeguro { get; set; }
+    public string? FotoUrl { get; set; }
     public string? Observaciones { get; set; }
 }
 

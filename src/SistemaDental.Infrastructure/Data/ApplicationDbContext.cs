@@ -104,15 +104,28 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.LastName).HasColumnName("last_name").IsRequired().HasMaxLength(100);
             // NombreCompleto es una propiedad calculada, no se mapea a la BD
             entity.Ignore(e => e.NombreCompleto);
+            entity.Property(e => e.TipoDocumento).HasColumnName("document_type").IsRequired().HasMaxLength(50).HasDefaultValue("DNI");
             entity.Property(e => e.DniPasaporte).HasColumnName("document_number").IsRequired().HasMaxLength(50);
             entity.Property(e => e.FechaNacimiento).HasColumnName("date_of_birth");
+            entity.Property(e => e.Genero).HasColumnName("gender").HasMaxLength(20);
             entity.Property(e => e.Telefono).HasColumnName("phone").IsRequired().HasMaxLength(50);
+            entity.Property(e => e.TelefonoAlternativo).HasColumnName("alternate_phone").HasMaxLength(50);
             entity.Property(e => e.Email).HasColumnName("email").HasMaxLength(255);
             entity.Property(e => e.Direccion).HasColumnName("address");
+            entity.Property(e => e.Ciudad).HasColumnName("city").HasMaxLength(100);
+            entity.Property(e => e.TipoSangre).HasColumnName("blood_type").HasMaxLength(10);
             entity.Property(e => e.Alergias).HasColumnName("allergies");
+            entity.Property(e => e.CondicionesMedicas).HasColumnName("medical_conditions");
+            entity.Property(e => e.MedicamentosActuales).HasColumnName("current_medications");
+            entity.Property(e => e.ContactoEmergenciaNombre).HasColumnName("emergency_contact_name").HasMaxLength(255);
+            entity.Property(e => e.ContactoEmergenciaTelefono).HasColumnName("emergency_contact_phone").HasMaxLength(50);
+            entity.Property(e => e.SeguroDental).HasColumnName("dental_insurance").HasMaxLength(255);
+            entity.Property(e => e.NumeroSeguro).HasColumnName("insurance_number").HasMaxLength(100);
+            entity.Property(e => e.FotoUrl).HasColumnName("photo_url");
             entity.Property(e => e.Observaciones).HasColumnName("notes");
             // La BD tiene is_active (boolean)
             entity.Property(e => e.Activo).HasColumnName("is_active").HasDefaultValue(true);
+            entity.Property(e => e.CreadoPor).HasColumnName("created_by");
             entity.Property(e => e.FechaCreacion).HasColumnName("created_at");
             // FechaUltimaCita no existe en la BD, se calcula desde appointments
             entity.Ignore(e => e.FechaUltimaCita);
