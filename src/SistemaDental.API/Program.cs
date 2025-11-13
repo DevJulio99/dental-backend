@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Npgsql;
 using SistemaDental.Application.Services;
 using SistemaDental.Application.Validators;
 using SistemaDental.Infrastructure.Data;
@@ -68,12 +69,19 @@ builder.Services.AddCors(options =>
 
 // Configuración de Entity Framework Core con PostgreSQL
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-var loggerFactory = LoggerFactory.Create(b => b.AddConsole());
-var enumInterceptor = new SistemaDental.Infrastructure.Data.PostgresEnumInterceptor(
-    loggerFactory.CreateLogger<SistemaDental.Infrastructure.Data.PostgresEnumInterceptor>());
+
+// Configurar Npgsql Data Source con mapeo de enums
+var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+// MapEnum sin traductor - especificando explícitamente cada mapeo
+dataSourceBuilder.MapEnum<SistemaDental.Domain.Enums.TenantStatus>("tenant_status");
+dataSourceBuilder.MapEnum<SistemaDental.Domain.Enums.UserStatus>("user_status");
+dataSourceBuilder.MapEnum<SistemaDental.Domain.Enums.UserRole>("user_role");
+dataSourceBuilder.MapEnum<SistemaDental.Domain.Enums.AppointmentStatus>("appointment_status");
+dataSourceBuilder.MapEnum<SistemaDental.Domain.Enums.ToothStatus>("tooth_status");
+var dataSource = dataSourceBuilder.Build();
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString)
-           .AddInterceptors(enumInterceptor));
+    options.UseNpgsql(dataSource));
 
 // Configuración de JWT
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key no configurada");

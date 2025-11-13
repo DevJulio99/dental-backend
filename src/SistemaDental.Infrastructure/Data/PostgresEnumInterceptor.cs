@@ -75,36 +75,57 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
 
     private void ModifyInsertCommand(DbCommand command)
     {
+        var originalSql = command.CommandText;
+        _logger?.LogDebug("ModifyInsertCommand: Procesando SQL: {Sql}", originalSql);
+
         // Buscar qué tabla se está insertando
-        var tableMatch = Regex.Match(command.CommandText, @"INSERT\s+INTO\s+(\w+)\s*\(", RegexOptions.IgnoreCase);
+        var tableMatch = Regex.Match(originalSql, @"INSERT\s+INTO\s+(\w+)\s*\(", RegexOptions.IgnoreCase);
         if (!tableMatch.Success)
         {
+            _logger?.LogDebug("ModifyInsertCommand: No se encontró patrón INSERT INTO table");
             return;
         }
 
         var tableName = tableMatch.Groups[1].Value.ToLower();
+        _logger?.LogDebug("ModifyInsertCommand: Tabla encontrada: {TableName}", tableName);
+
         if (!TableColumnEnumMap.TryGetValue(tableName, out var columnEnumMap))
         {
+            _logger?.LogDebug("ModifyInsertCommand: Tabla {TableName} no tiene enums configurados", tableName);
             return;
         }
 
+        _logger?.LogDebug("ModifyInsertCommand: Tabla {TableName} tiene {Count} columnas con enums", tableName, columnEnumMap.Count);
+
         // Buscar las columnas en el INSERT
-        var columnMatch = Regex.Match(command.CommandText, $@"INSERT\s+INTO\s+{Regex.Escape(tableName)}\s*\(([^)]+)\)", RegexOptions.IgnoreCase);
+        var columnMatch = Regex.Match(originalSql, $@"INSERT\s+INTO\s+{Regex.Escape(tableName)}\s*\(([^)]+)\)", RegexOptions.IgnoreCase);
         if (!columnMatch.Success)
         {
+            _logger?.LogDebug("ModifyInsertCommand: No se encontraron columnas en INSERT");
             return;
         }
 
         var columns = columnMatch.Groups[1].Value.Split(',').Select(c => c.Trim()).ToArray();
+        _logger?.LogDebug("ModifyInsertCommand: {Count} columnas encontradas: {Columns}", columns.Length, string.Join(", ", columns));
         
         // Encontrar la sección VALUES
-        var valuesMatch = Regex.Match(command.CommandText, @"VALUES\s*\(([^)]+)\)", RegexOptions.IgnoreCase);
+        var valuesMatch = Regex.Match(originalSql, @"VALUES\s*\(([^)]+)\)", RegexOptions.IgnoreCase);
         if (!valuesMatch.Success)
         {
+            _logger?.LogDebug("ModifyInsertCommand: No se encontró sección VALUES");
             return;
         }
 
         var values = valuesMatch.Groups[1].Value.Split(',').Select(v => v.Trim()).ToArray();
+        _logger?.LogDebug("ModifyInsertCommand: {Count} valores encontrados", values.Length);
+        
+        // Log de todos los parámetros disponibles
+        _logger?.LogDebug("ModifyInsertCommand: Parámetros disponibles ({Count}):", command.Parameters.Count);
+        for (int i = 0; i < command.Parameters.Count; i++)
+        {
+            var p = command.Parameters[i];
+            _logger?.LogDebug("  [{Index}] Name={Name}, Value={Value}, Type={Type}", i, p.ParameterName, p.Value, p.DbType);
+        }
         
         // Procesar cada columna que necesita conversión a enum
         var modifiedValues = values.ToArray();
@@ -119,6 +140,8 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
                 continue;
             }
 
+            _logger?.LogDebug("ModifyInsertCommand: Columna {ColumnName} necesita conversión a {EnumType}", columnName, enumType);
+
             // Obtener el placeholder del parámetro en el SQL
             var paramPlaceholder = values[colIdx].Trim();
             
@@ -127,54 +150,82 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
                 ? paramPlaceholder.Substring(1) 
                 : paramPlaceholder;
             
+            _logger?.LogDebug("ModifyInsertCommand: Buscando parámetro {ParamName}", paramNameWithoutAt);
+
             // Buscar el parámetro correspondiente
             int paramIndex = -1;
+            DbParameter? foundParam = null;
+            
+            // Intentar con el nombre sin @
             for (int i = 0; i < command.Parameters.Count; i++)
             {
                 var param = command.Parameters[i];
-                if (paramNameWithoutAt.Equals(param.ParameterName, StringComparison.OrdinalIgnoreCase))
+                // Comparar sin distinguir mayúsculas/minúsculas y sin importar si tiene @ o no
+                var paramNameNormalized = param.ParameterName.TrimStart('@');
+                if (paramNameWithoutAt.Equals(paramNameNormalized, StringComparison.OrdinalIgnoreCase))
                 {
                     paramIndex = i;
+                    foundParam = param;
+                    _logger?.LogDebug("ModifyInsertCommand: Parámetro encontrado en índice {Index} con nombre {Name}", i, param.ParameterName);
                     break;
                 }
             }
             
-            if (paramIndex >= 0)
+            if (foundParam != null)
             {
-                var param = command.Parameters[paramIndex];
-                if (param.Value != null)
+                if (foundParam.Value != null && foundParam.Value != DBNull.Value)
                 {
-                    var paramValue = param.Value.ToString();
+                    var paramValue = foundParam.Value.ToString();
                     if (!string.IsNullOrEmpty(paramValue))
                     {
+                        _logger?.LogInformation("ModifyInsertCommand: Valor del parámetro {ParamName}: {Value}, convirtiendo a enum {EnumType}", 
+                            paramNameWithoutAt, paramValue, enumType);
                         // Escapar el valor para evitar SQL injection
                         var escapedValue = paramValue.Replace("'", "''");
-                        // Reemplazar el placeholder del parámetro con el valor directo con cast
-                        modifiedValues[colIdx] = $"CAST('{escapedValue}'::text AS {enumType})";
+                        // Usar la sintaxis correcta de PostgreSQL: 'valor'::enum_type
+                        modifiedValues[colIdx] = $"'{escapedValue}'::{enumType}";
                         parametersToRemove.Add(paramIndex);
                     }
                 }
+                else
+                {
+                    _logger?.LogDebug("ModifyInsertCommand: Parámetro {ParamName} es null o DBNull", paramNameWithoutAt);
+                }
+            }
+            else
+            {
+                _logger?.LogWarning("ModifyInsertCommand: No se encontró el parámetro {ParamName}", paramNameWithoutAt);
             }
         }
         
         // Si se modificó algo, actualizar el comando SQL
         if (parametersToRemove.Count > 0)
         {
+            _logger?.LogInformation("ModifyInsertCommand: Modificando {Count} parámetros de enum", parametersToRemove.Count);
             var newValues = string.Join(", ", modifiedValues);
-            command.CommandText = Regex.Replace(
-                command.CommandText,
+            var newSql = Regex.Replace(
+                originalSql,
                 @"VALUES\s*\([^)]+\)",
                 $"VALUES ({newValues})",
                 RegexOptions.IgnoreCase);
+            
+            _logger?.LogInformation("ModifyInsertCommand: SQL original: {OriginalSql}", originalSql);
+            _logger?.LogInformation("ModifyInsertCommand: SQL modificado: {NewSql}", newSql);
+            command.CommandText = newSql;
             
             // Remover los parámetros por índice, en orden descendente para evitar problemas de índices
             foreach (var index in parametersToRemove.OrderByDescending(i => i))
             {
                 if (index >= 0 && index < command.Parameters.Count)
                 {
+                    _logger?.LogDebug("ModifyInsertCommand: Removiendo parámetro en índice {Index}", index);
                     command.Parameters.RemoveAt(index);
                 }
             }
+        }
+        else
+        {
+            _logger?.LogDebug("ModifyInsertCommand: No se modificó ningún parámetro");
         }
     }
 
@@ -301,7 +352,7 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
                     }
                 }
 
-                if (foundParam != null && foundParam.Value != null)
+                if (foundParam != null && foundParam.Value != null && foundParam.Value != DBNull.Value)
                 {
                     var paramValue = foundParam.Value.ToString();
                     if (!string.IsNullOrEmpty(paramValue))
@@ -309,8 +360,8 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
                         _logger?.LogInformation("ModifyUpdateCommand: Valor del parámetro: {Value}, convirtiendo a enum {EnumType}", paramValue, enumType);
                         // Escapar el valor para evitar SQL injection
                         var escapedValue = paramValue.Replace("'", "''");
-                        // Reemplazar con el cast al enum
-                        modifiedSetParts.Add($"{columnName} = CAST('{escapedValue}'::text AS {enumType})");
+                        // Usar la sintaxis correcta de PostgreSQL: 'valor'::enum_type
+                        modifiedSetParts.Add($"{columnName} = '{escapedValue}'::{enumType}");
                         parametersToRemove.Add(paramIndex);
                         continue;
                     }

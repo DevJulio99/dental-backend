@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SistemaDental.Domain.Entities;
+using SistemaDental.Domain.Enums;
 using SistemaDental.Infrastructure.Data;
 using SistemaDental.Infrastructure.Services;
 
@@ -16,7 +17,7 @@ public class UsuarioRepository : Repository<Usuario>, IUsuarioRepository
     {
         var query = _dbSet
             .Include(u => u.Tenant)
-            .Where(u => u.Email == email && u.Activo);
+            .Where(u => u.Email == email && u.Status == UserStatus.Active);
         
         if (tenantId.HasValue)
         {
@@ -29,7 +30,7 @@ public class UsuarioRepository : Repository<Usuario>, IUsuarioRepository
     public async Task<IEnumerable<Usuario>> GetByTenantAsync(Guid tenantId)
     {
         return await _dbSet
-            .Where(u => u.TenantId == tenantId && u.Activo)
+            .Where(u => u.TenantId == tenantId && u.Status == UserStatus.Active)
             .OrderBy(u => u.Nombre)
             .ThenBy(u => u.Apellido)
             .ToListAsync();
@@ -41,7 +42,7 @@ public class UsuarioRepository : Repository<Usuario>, IUsuarioRepository
             .Where(u => u.Email == email 
                 && u.EmailVerificationToken == token
                 && !u.EmailVerified
-                && u.Activo);
+                && u.Status == UserStatus.Active);
         
         if (tenantId.HasValue)
         {
@@ -58,7 +59,7 @@ public class UsuarioRepository : Repository<Usuario>, IUsuarioRepository
                 && u.PasswordResetToken == token
                 && u.PasswordResetExpires.HasValue
                 && u.PasswordResetExpires.Value > DateTime.UtcNow
-                && u.Activo);
+                && u.Status == UserStatus.Active);
         
         if (tenantId.HasValue)
         {

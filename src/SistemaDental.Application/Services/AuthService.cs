@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using SistemaDental.Application.DTOs.Auth;
 using SistemaDental.Application.DTOs.Tenant;
 using SistemaDental.Domain.Entities;
+using SistemaDental.Domain.Enums;
 using SistemaDental.Infrastructure.Repositories;
 using SistemaDental.Infrastructure.Services;
 using System.IdentityModel.Tokens.Jwt;
@@ -162,7 +163,7 @@ public class AuthService : IAuthService
                     Email = dto.Email,
                     Telefono = dto.Telefono,
                     Direccion = dto.Direccion,
-                    Activo = true,
+                    Status = TenantStatus.Active,
                     FechaCreacion = DateTime.UtcNow,
                     ConfirmacionEmail = true,
                     ConfirmacionSMS = false
@@ -181,8 +182,8 @@ public class AuthService : IAuthService
                     Apellido = dto.AdminApellido,
                     Email = dto.AdminEmail,
                     PasswordHash = _passwordService.HashPassword(dto.AdminPassword),
-                    Rol = "Admin",
-                    Activo = true,
+                    Role = UserRole.TenantAdmin,
+                    Status = UserStatus.Active,
                     FechaCreacion = DateTime.UtcNow,
                     EmailVerified = false, // Requiere verificación
                     EmailVerificationToken = Guid.NewGuid().ToString() // Generar token inicial

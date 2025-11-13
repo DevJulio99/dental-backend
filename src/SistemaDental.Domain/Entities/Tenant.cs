@@ -1,3 +1,5 @@
+using SistemaDental.Domain.Enums;
+
 namespace SistemaDental.Domain.Entities;
 
 public class Tenant
@@ -8,7 +10,7 @@ public class Tenant
     public string Email { get; set; } = string.Empty;
     public string Telefono { get; set; } = string.Empty;
     public string? Direccion { get; set; }
-    public bool Activo { get; set; } = true;
+    public TenantStatus Status { get; set; } = TenantStatus.Trial;
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     
@@ -16,6 +18,13 @@ public class Tenant
     public string? ConfiguracionHorarios { get; set; } // JSON con horarios semanales
     public bool ConfirmacionEmail { get; set; } = true;
     public bool ConfirmacionSMS { get; set; } = false;
+    
+    // Propiedad calculada para compatibilidad con código existente
+    public bool Activo
+    {
+        get => Status == TenantStatus.Active || Status == TenantStatus.Trial;
+        set => Status = value ? TenantStatus.Active : TenantStatus.Inactive;
+    }
     
     // Relaciones
     public ICollection<Usuario> Usuarios { get; set; } = new List<Usuario>();

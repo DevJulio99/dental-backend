@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SistemaDental.Application.DTOs.Auth;
 using SistemaDental.Domain.Entities;
+using SistemaDental.Domain.Enums;
 using SistemaDental.Infrastructure.Data;
 using SistemaDental.Infrastructure.Services;
 
@@ -43,7 +44,7 @@ public class UsuariosController : ControllerBase
         try
         {
             var usuarios = await _context.Usuarios
-                .Where(u => u.TenantId == tenantId.Value && u.Activo)
+                .Where(u => u.TenantId == tenantId.Value && u.Status == UserStatus.Active)
                 .Select(u => new UserInfo
                 {
                     Id = u.Id,
@@ -134,7 +135,7 @@ public class UsuariosController : ControllerBase
         try
         {
             var usuario = await _context.Usuarios
-                .Where(u => u.Id == id && u.TenantId == tenantId.Value && u.Activo)
+                .Where(u => u.Id == id && u.TenantId == tenantId.Value && u.Status == UserStatus.Active)
                 .Select(u => new UserInfo
                 {
                     Id = u.Id,
@@ -293,7 +294,7 @@ public class UsuariosController : ControllerBase
         try
         {
             var usuario = await _context.Usuarios
-                .FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId.Value && u.Activo);
+                .FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId.Value && u.Status == UserStatus.Active);
 
             if (usuario == null)
             {

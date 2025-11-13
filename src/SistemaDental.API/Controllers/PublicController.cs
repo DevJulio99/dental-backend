@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SistemaDental.Application.DTOs.Cita;
 using SistemaDental.Application.Services;
 using SistemaDental.Domain.Entities;
+using SistemaDental.Domain.Enums;
 using SistemaDental.Infrastructure.Data;
 using SistemaDental.Infrastructure.Repositories;
 
@@ -112,7 +113,7 @@ public class PublicController : ControllerBase
             // Obtener un odontólogo del tenant (o usar el primero disponible)
             // Nota: Los roles en la BD son "dentist" y "tenant_admin", pero se convierten a "Odontologo" y "Admin" en la entidad
             var usuarios = await _context.Usuarios
-                .Where(u => u.TenantId == tenant.Id && u.Activo)
+                .Where(u => u.TenantId == tenant.Id && u.Status == UserStatus.Active)
                 .ToListAsync();
             
             var odontologo = usuarios.FirstOrDefault(u => 

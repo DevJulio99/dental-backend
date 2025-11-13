@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Storage.Internal;
+using Npgsql;
 using SistemaDental.Domain.Entities;
+using SistemaDental.Domain.Enums;
 
 namespace SistemaDental.Infrastructure.Data;
 
@@ -41,18 +42,14 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Email).HasColumnName("email").IsRequired().HasMaxLength(200);
             entity.Property(e => e.Telefono).HasColumnName("phone").HasMaxLength(50);
             entity.Property(e => e.Direccion).HasColumnName("address");
-            // Mapear Activo: true = status = 'active', false = status = 'trial' (para nuevos tenants)
-            // El tipo de columna es tenant_status (enum de PostgreSQL), necesitamos hacer cast explícito
-            entity.Property(e => e.Activo)
-                .HasConversion(
-                    v => v ? "active" : "trial",
-                    v => v == "active" || v == "trial")
-                .HasColumnName("status")
-                .HasColumnType("tenant_status");
+            // Mapear el enum directamente - Npgsql lo manejará automáticamente
+            entity.Property(e => e.Status).HasColumnName("status");
             entity.Property(e => e.FechaCreacion).HasColumnName("created_at");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
             // ConfiguracionHorarios no existe en la BD, se ignora
             entity.Ignore(e => e.ConfiguracionHorarios);
+            // Ignorar la propiedad calculada Activo
+            entity.Ignore(e => e.Activo);
             entity.Property(e => e.ConfirmacionEmail).HasColumnName("enable_email_notifications");
             entity.Property(e => e.ConfirmacionSMS).HasColumnName("enable_sms_notifications");
         });
@@ -69,26 +66,17 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Apellido).HasColumnName("last_name").IsRequired().HasMaxLength(100);
             entity.Property(e => e.Email).HasColumnName("email").IsRequired().HasMaxLength(200);
             entity.Property(e => e.PasswordHash).HasColumnName("password_hash").IsRequired().HasMaxLength(500);
-            // Mapear Rol: convertir entre valores de enum/string
-            // El tipo de columna es user_role (enum de PostgreSQL), necesitamos hacer cast explícito
-            entity.Property(e => e.Rol)
-                .HasConversion(
-                    v => v == "Admin" ? "tenant_admin" : v == "Odontologo" ? "dentist" : v == "Asistente" ? "assistant" : v.ToLower(),
-                    v => v == "tenant_admin" ? "Admin" : v == "dentist" ? "Odontologo" : v == "assistant" ? "Asistente" : v == "receptionist" ? "Asistente" : v)
-                .HasColumnName("role")
-                .HasColumnType("user_role")
-                .IsRequired();
-            // Mapear Activo: true = status = 'active', false = status = 'inactive'
-            // El tipo de columna es user_status (enum de PostgreSQL), necesitamos hacer cast explícito
-            entity.Property(e => e.Activo)
-                .HasConversion(
-                    v => v ? "active" : "inactive",
-                    v => v == "active")
-                .HasColumnName("status")
-                .HasColumnType("user_status");
+            // Mapear los enums directamente - Npgsql los manejará automáticamente
+            entity.Property(e => e.Role).HasColumnName("role").IsRequired();
+            entity.Property(e => e.Status).HasColumnName("status");
             entity.Property(e => e.FechaCreacion).HasColumnName("created_at");
             entity.Property(e => e.UltimoAcceso).HasColumnName("last_login_at");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+            
+            // Ignorar propiedades calculadas
+            entity.Ignore(e => e.Rol);
+            entity.Ignore(e => e.Activo);
+            entity.Ignore(e => e.IsLocked);
             
             // Campos de seguridad
             entity.Property(e => e.FailedLoginAttempts).HasColumnName("failed_login_attempts").HasDefaultValue(0);
@@ -97,9 +85,6 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.PasswordResetExpires).HasColumnName("password_reset_expires");
             entity.Property(e => e.EmailVerified).HasColumnName("email_verified").HasDefaultValue(false);
             entity.Property(e => e.EmailVerificationToken).HasColumnName("email_verification_token").HasMaxLength(255);
-            
-            // Ignorar propiedad calculada
-            entity.Ignore(e => e.IsLocked);
             
             entity.HasOne(e => e.Tenant)
                 .WithMany(t => t.Usuarios)
@@ -156,13 +141,12 @@ public class ApplicationDbContext : DbContext
             // FechaHora es una propiedad calculada, no se mapea directamente
             entity.Ignore(e => e.FechaHora);
             entity.Property(e => e.DuracionMinutos).HasColumnName("duration_minutes").HasDefaultValue(30);
-            // El tipo de columna es appointment_status (enum de PostgreSQL), necesitamos hacer cast explícito
+            // Usamos una conversión a string, y el interceptor se encargará del cast a enum
             entity.Property(e => e.Estado)
                 .HasConversion(
                     v => v.ToLower(),
                     v => v)
-                .HasColumnName("status")
-                .HasColumnType("appointment_status");
+                .HasColumnName("status");
             entity.Property(e => e.Motivo).HasColumnName("reason").IsRequired();
             entity.Property(e => e.Observaciones).HasColumnName("notes");
             entity.Property(e => e.NotificationSent).HasColumnName("notification_sent").HasDefaultValue(false);
@@ -201,13 +185,12 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.TenantId).HasColumnName("tenant_id");
             entity.Property(e => e.PacienteId).HasColumnName("patient_id");
             entity.Property(e => e.NumeroDiente).HasColumnName("tooth_number");
-            // El tipo de columna es tooth_status (enum de PostgreSQL), necesitamos hacer cast explícito
+            // Usamos una conversión a string, y el interceptor se encargará del cast a enum
             entity.Property(e => e.Estado)
                 .HasConversion(
                     v => v.ToLower(),
                     v => v)
                 .HasColumnName("status")
-                .HasColumnType("tooth_status")
                 .IsRequired();
             entity.Property(e => e.Observaciones).HasColumnName("notes");
             entity.Property(e => e.FechaRegistro).HasColumnName("record_date");

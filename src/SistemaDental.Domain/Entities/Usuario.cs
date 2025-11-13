@@ -1,3 +1,5 @@
+using SistemaDental.Domain.Enums;
+
 namespace SistemaDental.Domain.Entities;
 
 public class Usuario
@@ -8,8 +10,8 @@ public class Usuario
     public string Apellido { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
-    public string Rol { get; set; } = string.Empty; // Admin, Odontologo, Asistente
-    public bool Activo { get; set; } = true;
+    public UserRole Role { get; set; } = UserRole.Assistant;
+    public UserStatus Status { get; set; } = UserStatus.Active;
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
     public DateTime? UltimoAcceso { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -21,6 +23,34 @@ public class Usuario
     public DateTime? PasswordResetExpires { get; set; }
     public bool EmailVerified { get; set; } = false;
     public string? EmailVerificationToken { get; set; }
+    
+    // Propiedades calculadas para compatibilidad con código existente
+    public string Rol
+    {
+        get => Role switch
+        {
+            UserRole.TenantAdmin => "Admin",
+            UserRole.Dentist => "Odontologo",
+            UserRole.Assistant => "Asistente",
+            UserRole.Receptionist => "Asistente",
+            UserRole.SuperAdmin => "SuperAdmin",
+            _ => "Asistente"
+        };
+        set => Role = value switch
+        {
+            "Admin" => UserRole.TenantAdmin,
+            "Odontologo" => UserRole.Dentist,
+            "Asistente" => UserRole.Assistant,
+            "SuperAdmin" => UserRole.SuperAdmin,
+            _ => UserRole.Assistant
+        };
+    }
+    
+    public bool Activo
+    {
+        get => Status == UserStatus.Active;
+        set => Status = value ? UserStatus.Active : UserStatus.Inactive;
+    }
     
     // Relaciones
     public Tenant Tenant { get; set; } = null!;
