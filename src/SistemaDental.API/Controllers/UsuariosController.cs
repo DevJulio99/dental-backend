@@ -51,7 +51,12 @@ public class UsuariosController : ControllerBase
                     Nombre = u.Nombre,
                     Apellido = u.Apellido,
                     Email = u.Email,
-                    Rol = u.Rol
+                    Rol = u.Rol,
+                    ProfessionalLicense = u.ProfessionalLicense,
+                    Specialization = u.Specialization,
+                    Bio = u.Bio,
+                    AvatarUrl = u.AvatarUrl,
+                    Phone = u.Phone
                 })
                 .ToListAsync();
 
@@ -99,7 +104,13 @@ public class UsuariosController : ControllerBase
                 PasswordHash = _passwordService.HashPassword(dto.Password),
                 Rol = dto.Rol,
                 Activo = true,
-                FechaCreacion = DateTime.UtcNow
+                FechaCreacion = DateTime.UtcNow,
+                // Campos de perfil profesional
+                ProfessionalLicense = dto.ProfessionalLicense,
+                Specialization = dto.Specialization,
+                Bio = dto.Bio,
+                AvatarUrl = dto.AvatarUrl,
+                Phone = dto.Phone
             };
 
             await _context.Usuarios.AddAsync(usuario);
@@ -111,7 +122,12 @@ public class UsuariosController : ControllerBase
                 Nombre = usuario.Nombre,
                 Apellido = usuario.Apellido,
                 Email = usuario.Email,
-                Rol = usuario.Rol
+                Rol = usuario.Rol,
+                ProfessionalLicense = usuario.ProfessionalLicense,
+                Specialization = usuario.Specialization,
+                Bio = usuario.Bio,
+                AvatarUrl = usuario.AvatarUrl,
+                Phone = usuario.Phone
             };
 
             return CreatedAtAction(nameof(GetAll), new { id = usuario.Id }, userInfo);
@@ -142,7 +158,12 @@ public class UsuariosController : ControllerBase
                     Nombre = u.Nombre,
                     Apellido = u.Apellido,
                     Email = u.Email,
-                    Rol = u.Rol
+                    Rol = u.Rol,
+                    ProfessionalLicense = u.ProfessionalLicense,
+                    Specialization = u.Specialization,
+                    Bio = u.Bio,
+                    AvatarUrl = u.AvatarUrl,
+                    Phone = u.Phone
                 })
                 .FirstOrDefaultAsync();
 
@@ -198,7 +219,7 @@ public class UsuariosController : ControllerBase
                 usuario.Email = dto.Email;
             }
 
-            // Actualizar campos
+            // Actualizar campos básicos
             if (!string.IsNullOrEmpty(dto.Nombre))
                 usuario.Nombre = dto.Nombre;
 
@@ -211,6 +232,22 @@ public class UsuariosController : ControllerBase
             if (dto.Activo.HasValue)
                 usuario.Activo = dto.Activo.Value;
 
+            // Actualizar campos de perfil profesional
+            if (dto.ProfessionalLicense != null)
+                usuario.ProfessionalLicense = dto.ProfessionalLicense;
+
+            if (dto.Specialization != null)
+                usuario.Specialization = dto.Specialization;
+
+            if (dto.Bio != null)
+                usuario.Bio = dto.Bio;
+
+            if (dto.AvatarUrl != null)
+                usuario.AvatarUrl = dto.AvatarUrl;
+
+            if (dto.Phone != null)
+                usuario.Phone = dto.Phone;
+
             usuario.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -221,7 +258,12 @@ public class UsuariosController : ControllerBase
                 Nombre = usuario.Nombre,
                 Apellido = usuario.Apellido,
                 Email = usuario.Email,
-                Rol = usuario.Rol
+                Rol = usuario.Rol,
+                ProfessionalLicense = usuario.ProfessionalLicense,
+                Specialization = usuario.Specialization,
+                Bio = usuario.Bio,
+                AvatarUrl = usuario.AvatarUrl,
+                Phone = usuario.Phone
             };
 
             return Ok(userInfo);
@@ -407,5 +449,12 @@ public class UsuarioCreateDto
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string Rol { get; set; } = string.Empty;
+    
+    // Campos opcionales de perfil profesional
+    public string? ProfessionalLicense { get; set; }
+    public string? Specialization { get; set; }
+    public string? Bio { get; set; }
+    public string? AvatarUrl { get; set; }
+    public string? Phone { get; set; }
 }
 

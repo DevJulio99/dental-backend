@@ -16,6 +16,13 @@ public class UserInfo
     public string Apellido { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string Rol { get; set; } = string.Empty;
+    
+    // Campos opcionales de perfil profesional
+    public string? ProfessionalLicense { get; set; }
+    public string? Specialization { get; set; }
+    public string? Bio { get; set; }
+    public string? AvatarUrl { get; set; }
+    public string? Phone { get; set; }
 }
 
 public class TenantInfo

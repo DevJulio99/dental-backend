@@ -16,6 +16,13 @@ public class Usuario
     public DateTime? UltimoAcceso { get; set; }
     public DateTime? UpdatedAt { get; set; }
     
+    // Campos de perfil profesional
+    public string? ProfessionalLicense { get; set; }
+    public string? Specialization { get; set; }
+    public string? Bio { get; set; }
+    public string? AvatarUrl { get; set; }
+    public string? Phone { get; set; }
+    
     // Campos de seguridad
     public int FailedLoginAttempts { get; set; } = 0;
     public DateTime? LockedUntil { get; set; }

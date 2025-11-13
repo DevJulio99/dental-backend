@@ -157,7 +157,12 @@ public class AuthService : IAuthService
                     Nombre = usuario.Nombre,
                     Apellido = usuario.Apellido,
                     Email = usuario.Email,
-                    Rol = usuario.Rol
+                    Rol = usuario.Rol,
+                    ProfessionalLicense = usuario.ProfessionalLicense,
+                    Specialization = usuario.Specialization,
+                    Bio = usuario.Bio,
+                    AvatarUrl = usuario.AvatarUrl,
+                    Phone = usuario.Phone
                 },
                 Tenant = new TenantInfo
                 {

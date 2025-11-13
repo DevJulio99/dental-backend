@@ -83,6 +83,13 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.UltimoAcceso).HasColumnName("last_login_at");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
             
+            // Campos de perfil profesional
+            entity.Property(e => e.ProfessionalLicense).HasColumnName("professional_license").HasMaxLength(100);
+            entity.Property(e => e.Specialization).HasColumnName("specialization").HasMaxLength(255);
+            entity.Property(e => e.Bio).HasColumnName("bio");
+            entity.Property(e => e.AvatarUrl).HasColumnName("avatar_url");
+            entity.Property(e => e.Phone).HasColumnName("phone").HasMaxLength(50);
+            
             // Ignorar propiedades calculadas
             entity.Ignore(e => e.Rol);
             entity.Ignore(e => e.Activo);
