@@ -68,9 +68,12 @@ builder.Services.AddCors(options =>
 
 // Configuración de Entity Framework Core con PostgreSQL
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var loggerFactory = LoggerFactory.Create(b => b.AddConsole());
+var enumInterceptor = new SistemaDental.Infrastructure.Data.PostgresEnumInterceptor(
+    loggerFactory.CreateLogger<SistemaDental.Infrastructure.Data.PostgresEnumInterceptor>());
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString)
-           .AddInterceptors(new SistemaDental.Infrastructure.Data.PostgresEnumInterceptor()));
+           .AddInterceptors(enumInterceptor));
 
 // Configuración de JWT
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key no configurada");

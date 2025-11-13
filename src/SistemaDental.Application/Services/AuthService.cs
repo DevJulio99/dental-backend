@@ -82,7 +82,10 @@ public class AuthService : IAuthService
                     _logger.LogWarning($"Cuenta bloqueada por intentos fallidos: {request.Email}");
                 }
                 
-                await _unitOfWork.Usuarios.UpdateAsync(usuario);
+            usuario.UpdatedAt = DateTime.UtcNow;
+            NormalizeUsuarioDateTimes(usuario);
+            
+            await _unitOfWork.Usuarios.UpdateAsync(usuario);
                 await _unitOfWork.SaveChangesAsync();
                 return null;
             }
@@ -91,6 +94,8 @@ public class AuthService : IAuthService
             usuario.FailedLoginAttempts = 0;
             usuario.LockedUntil = null;
             usuario.UltimoAcceso = DateTime.UtcNow;
+            usuario.UpdatedAt = DateTime.UtcNow;
+            NormalizeUsuarioDateTimes(usuario);
             await _unitOfWork.Usuarios.UpdateAsync(usuario);
             await _unitOfWork.SaveChangesAsync();
 
@@ -224,31 +229,59 @@ public class AuthService : IAuthService
     {
         try
         {
+            _logger.LogInformation("ForgotPasswordAsync: Iniciando solicitud para email: {Email}, Subdomain: {Subdomain}", 
+                dto.Email, dto.Subdomain ?? "no proporcionado");
+
             Tenant? tenant = null;
 
             // Si se proporciona subdomain, buscar el tenant
             if (!string.IsNullOrEmpty(dto.Subdomain))
             {
-                tenant = await _unitOfWork.Tenants.GetBySubdomainAsync(dto.Subdomain);
-                if (tenant == null || !tenant.Activo)
+                var normalizedSubdomain = dto.Subdomain.ToLower().Trim();
+                _logger.LogDebug("ForgotPasswordAsync: Buscando tenant con subdomain normalizado: {Subdomain}", normalizedSubdomain);
+                
+                tenant = await _unitOfWork.Tenants.GetBySubdomainAsync(normalizedSubdomain);
+                
+                if (tenant == null)
                 {
+                    _logger.LogWarning("ForgotPasswordAsync: Tenant no encontrado para subdomain: {Subdomain}", normalizedSubdomain);
                     return null;
                 }
+                
+                if (!tenant.Activo)
+                {
+                    _logger.LogWarning("ForgotPasswordAsync: Tenant encontrado pero no está activo. Subdomain: {Subdomain}, TenantId: {TenantId}", 
+                        normalizedSubdomain, tenant.Id);
+                    return null;
+                }
+                
+                _logger.LogDebug("ForgotPasswordAsync: Tenant encontrado. TenantId: {TenantId}, Nombre: {Nombre}", 
+                    tenant.Id, tenant.Nombre);
             }
 
             // Buscar usuario por email
+            _logger.LogDebug("ForgotPasswordAsync: Buscando usuario con email: {Email}, TenantId: {TenantId}", 
+                dto.Email, tenant != null ? tenant.Id.ToString() : "null");
+            
             var usuario = await _unitOfWork.Usuarios.GetByEmailAsync(dto.Email, tenant?.Id);
 
             if (usuario == null)
             {
+                _logger.LogWarning("ForgotPasswordAsync: Usuario no encontrado. Email: {Email}, TenantId: {TenantId}", 
+                    dto.Email, tenant != null ? tenant.Id.ToString() : "null");
                 // Por seguridad, no revelar si el email existe o no
                 // Retornamos null para indicar que no se generó token
                 return null;
             }
 
+            _logger.LogDebug("ForgotPasswordAsync: Usuario encontrado. UsuarioId: {UsuarioId}, TenantId: {TenantId}, Activo: {Activo}", 
+                usuario.Id, usuario.TenantId, usuario.Activo);
+
             // Si se proporcionó tenant, verificar que el usuario pertenezca a ese tenant
             if (tenant != null && usuario.TenantId != tenant.Id)
             {
+                _logger.LogWarning("ForgotPasswordAsync: Usuario no pertenece al tenant especificado. UsuarioTenantId: {UsuarioTenantId}, TenantId: {TenantId}", 
+                    usuario.TenantId, tenant.Id);
                 return null;
             }
 
@@ -257,6 +290,9 @@ public class AuthService : IAuthService
             usuario.PasswordResetToken = token;
             usuario.PasswordResetExpires = DateTime.UtcNow.AddHours(1);
             usuario.UpdatedAt = DateTime.UtcNow;
+            
+            // Normalizar todos los DateTime a UTC antes de guardar
+            NormalizeUsuarioDateTimes(usuario);
 
             await _unitOfWork.Usuarios.UpdateAsync(usuario);
             await _unitOfWork.SaveChangesAsync();
@@ -288,6 +324,7 @@ public class AuthService : IAuthService
             var token = Guid.NewGuid().ToString();
             usuario.EmailVerificationToken = token;
             usuario.UpdatedAt = DateTime.UtcNow;
+            NormalizeUsuarioDateTimes(usuario);
 
             await _unitOfWork.Usuarios.UpdateAsync(usuario);
             await _unitOfWork.SaveChangesAsync();
@@ -304,30 +341,104 @@ public class AuthService : IAuthService
         }
     }
 
-    public async Task<bool> VerifyEmailAsync(VerifyEmailDto dto)
+    public async Task<(bool Success, string? Reason)> VerifyEmailAsync(VerifyEmailDto dto)
     {
         try
         {
-            var usuario = await _unitOfWork.Usuarios.GetByEmailAndTokenAsync(dto.Email, dto.Token);
+            var tokenPreview = string.IsNullOrEmpty(dto.Token) 
+                ? "null" 
+                : dto.Token.Length > 8 
+                    ? dto.Token.Substring(0, 8) + "..." 
+                    : dto.Token;
+            _logger.LogInformation("VerifyEmailAsync: Iniciando verificación para email: {Email}, Token: {Token}, Subdomain: {Subdomain}", 
+                dto.Email, tokenPreview, dto.Subdomain ?? "no proporcionado");
+
+            Tenant? tenant = null;
+
+            // Si se proporciona subdomain, buscar el tenant
+            if (!string.IsNullOrEmpty(dto.Subdomain))
+            {
+                var normalizedSubdomain = dto.Subdomain.ToLower().Trim();
+                tenant = await _unitOfWork.Tenants.GetBySubdomainAsync(normalizedSubdomain);
+                
+                if (tenant == null)
+                {
+                    _logger.LogWarning("VerifyEmailAsync: Tenant no encontrado para subdomain: {Subdomain}", normalizedSubdomain);
+                    return (false, "Subdominio no válido");
+                }
+                
+                _logger.LogDebug("VerifyEmailAsync: Tenant encontrado. TenantId: {TenantId}", tenant.Id);
+            }
+
+            // Primero verificar si el usuario existe (sin filtros de token/verificación)
+            var usuarioExistente = await _unitOfWork.Usuarios.GetByEmailAsync(dto.Email, tenant?.Id);
+            if (usuarioExistente != null)
+            {
+                _logger.LogDebug("VerifyEmailAsync: Usuario encontrado. EmailVerified: {EmailVerified}, Activo: {Activo}, TokenEnBD: {TokenEnBD}, TokenRecibido: {TokenRecibido}", 
+                    usuarioExistente.EmailVerified, 
+                    usuarioExistente.Activo,
+                    usuarioExistente.EmailVerificationToken?.Substring(0, Math.Min(8, usuarioExistente.EmailVerificationToken?.Length ?? 0)) + "..." ?? "null",
+                    dto.Token?.Substring(0, Math.Min(8, dto.Token?.Length ?? 0)) + "..." ?? "null");
+            }
+            else
+            {
+                _logger.LogWarning("VerifyEmailAsync: Usuario no existe. Email: {Email}, TenantId: {TenantId}", 
+                    dto.Email, tenant != null ? tenant.Id.ToString() : "null");
+            }
+
+            var usuario = await _unitOfWork.Usuarios.GetByEmailAndTokenAsync(dto.Email, dto.Token ?? string.Empty, tenant?.Id);
 
             if (usuario == null)
             {
-                return false;
+                string? reason = null;
+                if (usuarioExistente != null)
+                {
+                    if (usuarioExistente.EmailVerified)
+                    {
+                        reason = "El email ya está verificado";
+                        _logger.LogWarning("VerifyEmailAsync: Email ya está verificado. Email: {Email}", dto.Email);
+                    }
+                    else if (!usuarioExistente.Activo)
+                    {
+                        reason = "El usuario no está activo";
+                        _logger.LogWarning("VerifyEmailAsync: Usuario no está activo. Email: {Email}", dto.Email);
+                    }
+                    else if (usuarioExistente.EmailVerificationToken != dto.Token)
+                    {
+                        reason = "Token inválido";
+                        _logger.LogWarning("VerifyEmailAsync: Token no coincide. Email: {Email}, TokenEnBD: {TokenEnBD}, TokenRecibido: {TokenRecibido}", 
+                            dto.Email,
+                            usuarioExistente.EmailVerificationToken ?? "null",
+                            dto.Token ?? "null");
+                    }
+                }
+                else
+                {
+                    reason = "Usuario no encontrado";
+                    _logger.LogWarning("VerifyEmailAsync: Usuario no encontrado. Email: {Email}, TenantId: {TenantId}", 
+                        dto.Email, tenant != null ? tenant.Id.ToString() : "null");
+                }
+                return (false, reason);
             }
+
+            _logger.LogDebug("VerifyEmailAsync: Usuario encontrado. UsuarioId: {UsuarioId}, EmailVerified: {EmailVerified}", 
+                usuario.Id, usuario.EmailVerified);
 
             usuario.EmailVerified = true;
             usuario.EmailVerificationToken = null;
             usuario.UpdatedAt = DateTime.UtcNow;
+            NormalizeUsuarioDateTimes(usuario);
 
             await _unitOfWork.Usuarios.UpdateAsync(usuario);
             await _unitOfWork.SaveChangesAsync();
 
-            return true;
+            _logger.LogInformation("VerifyEmailAsync: Email verificado exitosamente. Email: {Email}", dto.Email);
+            return (true, null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al verificar email");
-            return false;
+            return (false, "Error interno al verificar el email");
         }
     }
 
@@ -364,6 +475,7 @@ public class AuthService : IAuthService
             usuario.FailedLoginAttempts = 0;
             usuario.LockedUntil = null;
             usuario.UpdatedAt = DateTime.UtcNow;
+            NormalizeUsuarioDateTimes(usuario);
 
             await _unitOfWork.Usuarios.UpdateAsync(usuario);
             await _unitOfWork.SaveChangesAsync();
@@ -375,6 +487,37 @@ public class AuthService : IAuthService
         {
             _logger.LogError(ex, "Error al resetear contraseña");
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Normaliza todos los campos DateTime de un Usuario a UTC para evitar errores con PostgreSQL.
+    /// </summary>
+    private static void NormalizeUsuarioDateTimes(Usuario usuario)
+    {
+        if (usuario.FechaCreacion.Kind == DateTimeKind.Unspecified)
+        {
+            usuario.FechaCreacion = DateTime.SpecifyKind(usuario.FechaCreacion, DateTimeKind.Utc);
+        }
+        
+        if (usuario.UltimoAcceso.HasValue && usuario.UltimoAcceso.Value.Kind == DateTimeKind.Unspecified)
+        {
+            usuario.UltimoAcceso = DateTime.SpecifyKind(usuario.UltimoAcceso.Value, DateTimeKind.Utc);
+        }
+        
+        if (usuario.UpdatedAt.HasValue && usuario.UpdatedAt.Value.Kind == DateTimeKind.Unspecified)
+        {
+            usuario.UpdatedAt = DateTime.SpecifyKind(usuario.UpdatedAt.Value, DateTimeKind.Utc);
+        }
+        
+        if (usuario.LockedUntil.HasValue && usuario.LockedUntil.Value.Kind == DateTimeKind.Unspecified)
+        {
+            usuario.LockedUntil = DateTime.SpecifyKind(usuario.LockedUntil.Value, DateTimeKind.Utc);
+        }
+        
+        if (usuario.PasswordResetExpires.HasValue && usuario.PasswordResetExpires.Value.Kind == DateTimeKind.Unspecified)
+        {
+            usuario.PasswordResetExpires = DateTime.SpecifyKind(usuario.PasswordResetExpires.Value, DateTimeKind.Utc);
         }
     }
 

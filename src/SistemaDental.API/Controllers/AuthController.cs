@@ -133,26 +133,38 @@ public class AuthController : ControllerBase
 
         var token = await _authService.ForgotPasswordAsync(dto);
 
-        // Por seguridad, siempre retornamos éxito aunque el email no exista
-        if (token != null)
+        // En desarrollo, siempre devolvemos información detallada incluyendo el token
+        if (_environment.IsDevelopment())
         {
-            // En desarrollo, devolvemos el token en la respuesta para facilitar las pruebas
-            if (_environment.IsDevelopment())
+            if (token != null)
             {
                 return Ok(new 
                 { 
                     message = "Token de reset generado exitosamente. En producción, este token se enviaría por email.",
                     token = token,
-                    expiresIn = "1 hora"
+                    expiresIn = "1 hora",
+                    expiresAt = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ssZ")
                 });
             }
-            
-            // En producción, no devolvemos el token (se enviaría por email)
+            else
+            {
+                return Ok(new 
+                { 
+                    message = "No se pudo generar el token. El email puede no existir o el subdominio puede ser inválido.",
+                    token = (string?)null,
+                    debug = "En desarrollo: revisa los logs del servidor para más detalles."
+                });
+            }
+        }
+
+        // En producción, por seguridad siempre retornamos éxito aunque el email no exista
+        if (token != null)
+        {
             return Ok(new { message = "Si el email existe, se ha enviado un token de reset por email." });
         }
 
         // Por seguridad, retornamos el mismo mensaje aunque el email no exista
-        return Ok(new { message = "Si el email existe, se ha enviado un token de reset." });
+        return Ok(new { message = "Si el email existe, se ha enviado un token de reset por email." });
     }
 
     [HttpPost("reset-password")]
@@ -192,11 +204,23 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Email y token son requeridos" });
         }
 
-        var result = await _authService.VerifyEmailAsync(dto);
-
-        if (!result)
+        // Si se proporciona subdomain, establecer el tenant
+        if (!string.IsNullOrEmpty(dto.Subdomain))
         {
-            return BadRequest(new { message = "Token inválido o email ya verificado" });
+            var tenant = await _tenantRepository.GetBySubdomainAsync(dto.Subdomain);
+            if (tenant == null)
+            {
+                return BadRequest(new { message = "Subdominio no válido" });
+            }
+            _tenantService.SetCurrentTenant(tenant.Id);
+        }
+
+        var (success, reason) = await _authService.VerifyEmailAsync(dto);
+
+        if (!success)
+        {
+            var message = reason ?? "Token inválido o email ya verificado";
+            return BadRequest(new { message });
         }
 
         return Ok(new { message = "Email verificado exitosamente" });

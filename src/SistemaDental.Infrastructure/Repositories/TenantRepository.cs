@@ -14,9 +14,11 @@ public class TenantRepository : Repository<Tenant>, ITenantRepository
 
     public async Task<Tenant?> GetBySubdomainAsync(string subdomain)
     {
+        // Normalizar a minúsculas (todos los subdominios se guardan en minúsculas)
+        var normalizedSubdomain = subdomain.ToLower().Trim();
         // Buscar por slug (que es el campo subdomain en la BD)
         return await _dbSet
-            .FirstOrDefaultAsync(t => t.Subdominio == subdomain && t.Activo);
+            .FirstOrDefaultAsync(t => t.Subdominio == normalizedSubdomain && t.Activo);
     }
 
     public async Task<bool> SubdomainExistsAsync(string subdomain)
