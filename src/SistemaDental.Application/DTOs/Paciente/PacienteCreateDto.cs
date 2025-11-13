@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace SistemaDental.Application.DTOs.Paciente;
 
 public class PacienteCreateDto
@@ -5,6 +7,9 @@ public class PacienteCreateDto
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     // Propiedad de compatibilidad - se divide en FirstName y LastName
+    // Oculto de la serialización JSON para evitar confusión en Swagger
+    // Solo necesitas enviar firstName y lastName
+    [JsonIgnore]
     public string NombreCompleto
     {
         get => $"{FirstName} {LastName}".Trim();

@@ -40,6 +40,12 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Email y contraseña son requeridos" });
         }
 
+        // Normalizar subdominio si se proporciona (consistencia con el servicio)
+        if (!string.IsNullOrEmpty(request.Subdomain))
+        {
+            request.Subdomain = request.Subdomain.ToLower().Trim();
+        }
+
         // Si se proporciona subdomain, establecer el tenant
         if (!string.IsNullOrEmpty(request.Subdomain))
         {

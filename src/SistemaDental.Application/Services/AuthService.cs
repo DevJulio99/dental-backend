@@ -37,42 +37,74 @@ public class AuthService : IAuthService
     {
         try
         {
+            _logger.LogInformation("LoginAsync: Iniciando login para email: {Email}, Subdomain: {Subdomain}", 
+                request.Email, request.Subdomain ?? "no proporcionado");
+
             Tenant? tenant = null;
 
             // Si se proporciona subdomain, buscar el tenant
             if (!string.IsNullOrEmpty(request.Subdomain))
             {
-                tenant = await _unitOfWork.Tenants.GetBySubdomainAsync(request.Subdomain);
-                if (tenant == null || !tenant.Activo)
+                // Normalizar subdominio a minúsculas (consistencia con otros métodos)
+                var normalizedSubdomain = request.Subdomain.ToLower().Trim();
+                _logger.LogDebug("LoginAsync: Buscando tenant con subdomain normalizado: {Subdomain}", normalizedSubdomain);
+                
+                tenant = await _unitOfWork.Tenants.GetBySubdomainAsync(normalizedSubdomain);
+                
+                if (tenant == null)
                 {
+                    _logger.LogWarning("LoginAsync: Tenant no encontrado para subdomain: {Subdomain}", normalizedSubdomain);
                     return null;
                 }
+                
+                // El repositorio ya filtra por status activo, pero verificamos por seguridad
+                if (!tenant.Activo)
+                {
+                    _logger.LogWarning("LoginAsync: Tenant encontrado pero no está activo. Subdomain: {Subdomain}, TenantId: {TenantId}", 
+                        normalizedSubdomain, tenant.Id);
+                    return null;
+                }
+                
+                _logger.LogDebug("LoginAsync: Tenant encontrado. TenantId: {TenantId}, Nombre: {Nombre}", 
+                    tenant.Id, tenant.Nombre);
             }
 
             // Buscar usuario por email
+            _logger.LogDebug("LoginAsync: Buscando usuario con email: {Email}, TenantId: {TenantId}", 
+                request.Email, tenant != null ? tenant.Id.ToString() : "null");
+            
             var usuario = await _unitOfWork.Usuarios.GetByEmailAsync(request.Email, tenant?.Id);
 
             if (usuario == null)
             {
+                _logger.LogWarning("LoginAsync: Usuario no encontrado. Email: {Email}, TenantId: {TenantId}", 
+                    request.Email, tenant != null ? tenant.Id.ToString() : "null");
                 return null;
             }
+
+            _logger.LogDebug("LoginAsync: Usuario encontrado. UsuarioId: {UsuarioId}, TenantId: {TenantId}, Activo: {Activo}", 
+                usuario.Id, usuario.TenantId, usuario.Activo);
 
             // Si se proporcionó tenant, verificar que el usuario pertenezca a ese tenant
             if (tenant != null && usuario.TenantId != tenant.Id)
             {
+                _logger.LogWarning("LoginAsync: Usuario no pertenece al tenant especificado. UsuarioTenantId: {UsuarioTenantId}, TenantId: {TenantId}", 
+                    usuario.TenantId, tenant.Id);
                 return null;
             }
 
             // Verificar si la cuenta está bloqueada
             if (usuario.IsLocked)
             {
-                _logger.LogWarning($"Intento de login en cuenta bloqueada: {request.Email}");
+                _logger.LogWarning("LoginAsync: Intento de login en cuenta bloqueada: {Email}", request.Email);
                 return null;
             }
 
             // Verificar contraseña
             if (!_passwordService.VerifyPassword(request.Password, usuario.PasswordHash))
             {
+                _logger.LogWarning("LoginAsync: Contraseña incorrecta para email: {Email}", request.Email);
+                
                 // Incrementar intentos fallidos
                 usuario.FailedLoginAttempts++;
                 
@@ -80,13 +112,13 @@ public class AuthService : IAuthService
                 if (usuario.FailedLoginAttempts >= 5)
                 {
                     usuario.LockedUntil = DateTime.UtcNow.AddMinutes(30);
-                    _logger.LogWarning($"Cuenta bloqueada por intentos fallidos: {request.Email}");
+                    _logger.LogWarning("LoginAsync: Cuenta bloqueada por intentos fallidos: {Email}", request.Email);
                 }
                 
-            usuario.UpdatedAt = DateTime.UtcNow;
-            NormalizeUsuarioDateTimes(usuario);
-            
-            await _unitOfWork.Usuarios.UpdateAsync(usuario);
+                usuario.UpdatedAt = DateTime.UtcNow;
+                NormalizeUsuarioDateTimes(usuario);
+                
+                await _unitOfWork.Usuarios.UpdateAsync(usuario);
                 await _unitOfWork.SaveChangesAsync();
                 return null;
             }
@@ -100,8 +132,19 @@ public class AuthService : IAuthService
             await _unitOfWork.Usuarios.UpdateAsync(usuario);
             await _unitOfWork.SaveChangesAsync();
 
+            // Verificar que el Tenant esté cargado
+            if (usuario.Tenant == null)
+            {
+                _logger.LogError("LoginAsync: El Tenant del usuario no está cargado. UsuarioId: {UsuarioId}, TenantId: {TenantId}", 
+                    usuario.Id, usuario.TenantId);
+                return null;
+            }
+
             // Generar token JWT
             var token = GenerateJwtToken(usuario);
+
+            _logger.LogInformation("LoginAsync: Login exitoso para email: {Email}, UsuarioId: {UsuarioId}", 
+                request.Email, usuario.Id);
 
             return new LoginResponse
             {
@@ -126,7 +169,7 @@ public class AuthService : IAuthService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al realizar login");
+            _logger.LogError(ex, "LoginAsync: Error al realizar login para email: {Email}", request.Email);
             return null;
         }
     }

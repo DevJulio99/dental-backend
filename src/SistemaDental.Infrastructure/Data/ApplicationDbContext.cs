@@ -66,9 +66,19 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Apellido).HasColumnName("last_name").IsRequired().HasMaxLength(100);
             entity.Property(e => e.Email).HasColumnName("email").IsRequired().HasMaxLength(200);
             entity.Property(e => e.PasswordHash).HasColumnName("password_hash").IsRequired().HasMaxLength(500);
-            // Mapear los enums directamente - Npgsql los manejará automáticamente
-            entity.Property(e => e.Role).HasColumnName("role").IsRequired();
-            entity.Property(e => e.Status).HasColumnName("status");
+            // Mapear UserRole con conversión explícita a snake_case para PostgreSQL
+            entity.Property(e => e.Role)
+                .HasConversion(
+                    v => ConvertUserRoleToString(v),
+                    v => ConvertStringToUserRole(v))
+                .HasColumnName("role")
+                .IsRequired();
+            // Mapear UserStatus con conversión explícita a snake_case para PostgreSQL
+            entity.Property(e => e.Status)
+                .HasConversion(
+                    v => ConvertUserStatusToString(v),
+                    v => ConvertStringToUserStatus(v))
+                .HasColumnName("status");
             entity.Property(e => e.FechaCreacion).HasColumnName("created_at");
             entity.Property(e => e.UltimoAcceso).HasColumnName("last_login_at");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
@@ -289,6 +299,56 @@ public class ApplicationDbContext : DbContext
                 .HasForeignKey(e => e.UsuarioId)
                 .OnDelete(DeleteBehavior.Restrict);
             });
+    }
+
+    // Métodos auxiliares para convertir UserRole a/desde string
+    private static string ConvertUserRoleToString(UserRole role)
+    {
+        return role switch
+        {
+            UserRole.SuperAdmin => "super_admin",
+            UserRole.TenantAdmin => "tenant_admin",
+            UserRole.Dentist => "dentist",
+            UserRole.Assistant => "assistant",
+            UserRole.Receptionist => "receptionist",
+            _ => "assistant"
+        };
+    }
+
+    private static UserRole ConvertStringToUserRole(string value)
+    {
+        return value switch
+        {
+            "super_admin" => UserRole.SuperAdmin,
+            "tenant_admin" => UserRole.TenantAdmin,
+            "dentist" => UserRole.Dentist,
+            "assistant" => UserRole.Assistant,
+            "receptionist" => UserRole.Receptionist,
+            _ => UserRole.Assistant
+        };
+    }
+
+    // Métodos auxiliares para convertir UserStatus a/desde string
+    private static string ConvertUserStatusToString(UserStatus status)
+    {
+        return status switch
+        {
+            UserStatus.Active => "active",
+            UserStatus.Inactive => "inactive",
+            UserStatus.Suspended => "suspended",
+            _ => "active"
+        };
+    }
+
+    private static UserStatus ConvertStringToUserStatus(string value)
+    {
+        return value switch
+        {
+            "active" => UserStatus.Active,
+            "inactive" => UserStatus.Inactive,
+            "suspended" => UserStatus.Suspended,
+            _ => UserStatus.Active
+        };
     }
 
     // Métodos auxiliares para convertir AppointmentStatus a/desde string
