@@ -1,0 +1,270 @@
+using Microsoft.Extensions.Logging;
+using SistemaDental.Application.DTOs.Cita;
+using SistemaDental.Domain.Entities;
+using SistemaDental.Infrastructure.Repositories;
+using SistemaDental.Infrastructure.Services;
+
+namespace SistemaDental.Application.Services;
+
+public class CitaService : ICitaService
+{
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly ITenantService _tenantService;
+    private readonly ILogger<CitaService> _logger;
+
+    public CitaService(
+        IUnitOfWork unitOfWork,
+        ITenantService tenantService,
+        ILogger<CitaService> logger)
+    {
+        _unitOfWork = unitOfWork;
+        _tenantService = tenantService;
+        _logger = logger;
+    }
+
+    public async Task<CitaDto?> GetByIdAsync(Guid id)
+    {
+        var tenantId = _tenantService.GetCurrentTenantId();
+        if (!tenantId.HasValue) return null;
+
+        var cita = await _unitOfWork.Citas.GetByIdWithRelationsAsync(id, tenantId.Value);
+        if (cita == null) return null;
+
+        return MapToDto(cita);
+    }
+
+    public async Task<IEnumerable<CitaDto>> GetAllAsync()
+    {
+        var tenantId = _tenantService.GetCurrentTenantId();
+        if (!tenantId.HasValue) return Enumerable.Empty<CitaDto>();
+
+        var citas = await _unitOfWork.Citas.GetByTenantAsync(tenantId.Value);
+        return citas.Select(MapToDto);
+    }
+
+    public async Task<IEnumerable<CitaDto>> GetByDateRangeAsync(DateTime startDate, DateTime endDate)
+    {
+        var tenantId = _tenantService.GetCurrentTenantId();
+        if (!tenantId.HasValue) return Enumerable.Empty<CitaDto>();
+
+        var startDateOnly = DateOnly.FromDateTime(startDate);
+        var endDateOnly = DateOnly.FromDateTime(endDate);
+        
+        var citas = await _unitOfWork.Citas.GetByDateRangeAsync(tenantId.Value, startDateOnly, endDateOnly);
+        return citas.Select(MapToDto);
+    }
+
+    public async Task<IEnumerable<CitaDto>> GetByPacienteAsync(Guid pacienteId)
+    {
+        var tenantId = _tenantService.GetCurrentTenantId();
+        if (!tenantId.HasValue) return Enumerable.Empty<CitaDto>();
+
+        var citas = await _unitOfWork.Citas.GetByPacienteAsync(tenantId.Value, pacienteId);
+        return citas.Select(MapToDto);
+    }
+
+    public async Task<CitaDto> CreateAsync(CitaCreateDto dto)
+    {
+        var tenantId = _tenantService.GetCurrentTenantId();
+        if (!tenantId.HasValue)
+            throw new InvalidOperationException("Tenant no identificado");
+
+        // Verificar que el paciente existe y pertenece al tenant
+        var paciente = await _unitOfWork.Pacientes.GetByIdWithTenantAsync(dto.PacienteId, tenantId.Value);
+
+        if (paciente == null)
+            throw new InvalidOperationException("Paciente no encontrado");
+
+        // Calcular EndTime
+        var endTime = dto.StartTime.AddMinutes(dto.DuracionMinutos);
+
+        // Verificar que no haya conflicto de horario
+        var conflicto = await _unitOfWork.Citas.HasConflictAsync(
+            tenantId.Value, 
+            dto.AppointmentDate, 
+            dto.StartTime, 
+            endTime, 
+            dto.UsuarioId);
+
+        if (conflicto)
+            throw new InvalidOperationException("Ya existe una cita en ese horario");
+
+        var cita = new Cita
+        {
+            TenantId = tenantId.Value,
+            PacienteId = dto.PacienteId,
+            UsuarioId = dto.UsuarioId,
+            AppointmentDate = dto.AppointmentDate,
+            StartTime = dto.StartTime,
+            EndTime = endTime,
+            DuracionMinutos = dto.DuracionMinutos,
+            Estado = "scheduled",
+            Motivo = dto.Motivo ?? string.Empty,
+            Observaciones = dto.Observaciones,
+            FechaCreacion = DateTime.UtcNow
+        };
+
+        await _unitOfWork.Citas.AddAsync(cita);
+        await _unitOfWork.SaveChangesAsync();
+
+        return await GetByIdAsync(cita.Id) ?? throw new InvalidOperationException("Error al crear cita");
+    }
+
+    public async Task<CitaDto?> UpdateAsync(Guid id, CitaCreateDto dto)
+    {
+        var tenantId = _tenantService.GetCurrentTenantId();
+        if (!tenantId.HasValue) return null;
+
+        var cita = await _unitOfWork.Citas.GetByIdWithRelationsAsync(id, tenantId.Value);
+        if (cita == null) return null;
+
+        // Calcular EndTime
+        var endTime = dto.StartTime.AddMinutes(dto.DuracionMinutos);
+
+        // Verificar conflicto de horario (excluyendo la cita actual)
+        var conflicto = await _unitOfWork.Citas.HasConflictAsync(
+            tenantId.Value, 
+            dto.AppointmentDate, 
+            dto.StartTime, 
+            endTime, 
+            dto.UsuarioId, 
+            id);
+
+        if (conflicto)
+            throw new InvalidOperationException("Ya existe una cita en ese horario");
+
+        cita.PacienteId = dto.PacienteId;
+        cita.UsuarioId = dto.UsuarioId;
+        cita.AppointmentDate = dto.AppointmentDate;
+        cita.StartTime = dto.StartTime;
+        cita.EndTime = endTime;
+        cita.DuracionMinutos = dto.DuracionMinutos;
+        cita.Motivo = dto.Motivo ?? string.Empty;
+        cita.Observaciones = dto.Observaciones;
+        cita.UpdatedAt = DateTime.UtcNow;
+
+        await _unitOfWork.Citas.UpdateAsync(cita);
+        await _unitOfWork.SaveChangesAsync();
+
+        return await GetByIdAsync(id);
+    }
+
+    public async Task<bool> ConfirmAsync(Guid id)
+    {
+        var tenantId = _tenantService.GetCurrentTenantId();
+        if (!tenantId.HasValue) return false;
+
+        var cita = await _unitOfWork.Citas.GetByIdWithRelationsAsync(id, tenantId.Value);
+        if (cita == null || cita.DeletedAt != null) return false;
+
+        cita.Estado = "confirmed";
+        cita.UpdatedAt = DateTime.UtcNow;
+
+        await _unitOfWork.Citas.UpdateAsync(cita);
+        await _unitOfWork.SaveChangesAsync();
+
+        return true;
+    }
+
+    public async Task<bool> CancelAsync(Guid id)
+    {
+        var tenantId = _tenantService.GetCurrentTenantId();
+        if (!tenantId.HasValue) return false;
+
+        var cita = await _unitOfWork.Citas.GetByIdWithRelationsAsync(id, tenantId.Value);
+        if (cita == null || cita.DeletedAt != null) return false;
+
+        cita.Estado = "cancelled";
+        cita.CancelledAt = DateTime.UtcNow;
+        cita.UpdatedAt = DateTime.UtcNow;
+
+        await _unitOfWork.Citas.UpdateAsync(cita);
+        await _unitOfWork.SaveChangesAsync();
+
+        return true;
+    }
+
+    public async Task<bool> DeleteAsync(Guid id)
+    {
+        var tenantId = _tenantService.GetCurrentTenantId();
+        if (!tenantId.HasValue) return false;
+
+        var cita = await _unitOfWork.Citas.GetByIdWithRelationsAsync(id, tenantId.Value);
+        if (cita == null) return false;
+
+        // Soft delete
+        cita.DeletedAt = DateTime.UtcNow;
+        cita.UpdatedAt = DateTime.UtcNow;
+        
+        await _unitOfWork.Citas.UpdateAsync(cita);
+        await _unitOfWork.SaveChangesAsync();
+
+        return true;
+    }
+
+    public async Task<IEnumerable<DateTime>> GetAvailableSlotsAsync(DateTime date, Guid? usuarioId = null)
+    {
+        var tenantId = _tenantService.GetCurrentTenantId();
+        if (!tenantId.HasValue) return Enumerable.Empty<DateTime>();
+
+        // Obtener horarios configurados del tenant (por defecto 9:00 - 18:00)
+        var startHour = 9;
+        var endHour = 18;
+        var slotDuration = 30; // minutos
+
+        var startDateTime = new DateTime(date.Year, date.Month, date.Day, startHour, 0, 0);
+        var endDateTime = new DateTime(date.Year, date.Month, date.Day, endHour, 0, 0);
+
+        var dateOnly = DateOnly.FromDateTime(date);
+        
+        // Obtener citas ocupadas del día
+        var citasOcupadas = await _unitOfWork.Citas.GetOcupadasByDateAsync(tenantId.Value, dateOnly, usuarioId);
+
+        var slots = new List<DateTime>();
+        var currentSlot = startDateTime;
+
+        while (currentSlot < endDateTime)
+        {
+            var currentTime = TimeOnly.FromDateTime(currentSlot);
+            var slotEndTime = currentTime.AddMinutes(slotDuration);
+            
+            var slotOcupado = citasOcupadas.Any(c =>
+                currentTime < c.EndTime &&
+                slotEndTime > c.StartTime);
+
+            if (!slotOcupado)
+            {
+                slots.Add(currentSlot);
+            }
+
+            currentSlot = currentSlot.AddMinutes(slotDuration);
+        }
+
+        return slots;
+    }
+
+    private static CitaDto MapToDto(Cita cita)
+    {
+        return new CitaDto
+        {
+            Id = cita.Id,
+            PacienteId = cita.PacienteId,
+            PacienteNombre = cita.Paciente.NombreCompleto,
+            UsuarioId = cita.UsuarioId,
+            UsuarioNombre = cita.Usuario != null ? $"{cita.Usuario.Nombre} {cita.Usuario.Apellido}" : string.Empty,
+            AppointmentDate = cita.AppointmentDate,
+            StartTime = cita.StartTime,
+            EndTime = cita.EndTime,
+            DuracionMinutos = cita.DuracionMinutos,
+            Estado = cita.Estado,
+            Motivo = cita.Motivo,
+            Observaciones = cita.Observaciones,
+            NotificationSent = cita.NotificationSent,
+            ReminderSent = cita.ReminderSent,
+            CancellationReason = cita.CancellationReason,
+            CancelledAt = cita.CancelledAt,
+            FechaCreacion = cita.FechaCreacion
+        };
+    }
+}
+
