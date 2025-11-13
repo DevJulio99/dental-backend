@@ -196,7 +196,7 @@ public class PublicController : ControllerBase
                 StartTime = startTime,
                 EndTime = endTime,
                 DuracionMinutos = 30,
-                Estado = "scheduled",
+                Estado = SistemaDental.Domain.Enums.AppointmentStatus.Scheduled,
                 Motivo = dto.Motivo ?? "Consulta general",
                 FechaCreacion = DateTime.UtcNow
             };
@@ -235,7 +235,7 @@ public class PublicController : ControllerBase
             .Where(c => c.TenantId == tenantId &&
                        c.DeletedAt == null &&
                        c.AppointmentDate == dateOnly &&
-                       c.Estado != "cancelled" &&
+                       c.Estado != AppointmentStatus.Cancelled &&
                        (usuarioId == null || c.UsuarioId == usuarioId.Value))
             .ToListAsync();
 

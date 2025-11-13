@@ -1,3 +1,5 @@
+using SistemaDental.Domain.Enums;
+
 namespace SistemaDental.Domain.Entities;
 
 public class Cita
@@ -21,7 +23,7 @@ public class Cita
         }
     }
     public int DuracionMinutos { get; set; } = 30;
-    public string Estado { get; set; } = "scheduled"; // scheduled, confirmed, completed, cancelled
+    public AppointmentStatus Estado { get; set; } = AppointmentStatus.Scheduled;
     public string Motivo { get; set; } = string.Empty; // Requerido en BD
     public string? Observaciones { get; set; }
     public bool NotificationSent { get; set; } = false;

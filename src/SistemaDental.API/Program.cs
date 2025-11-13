@@ -17,7 +17,11 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 // Configuración de servicios
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddFluentValidationClientsideAdapters();
 builder.Services.AddEndpointsApiExplorer();
@@ -81,7 +85,8 @@ dataSourceBuilder.MapEnum<SistemaDental.Domain.Enums.ToothStatus>("tooth_status"
 var dataSource = dataSourceBuilder.Build();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(dataSource));
+    options.UseNpgsql(dataSource)
+           .AddInterceptors(new SistemaDental.Infrastructure.Data.PostgresEnumInterceptor()));
 
 // Configuración de JWT
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key no configurada");

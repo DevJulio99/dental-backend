@@ -1,3 +1,5 @@
+using SistemaDental.Domain.Enums;
+
 namespace SistemaDental.Application.DTOs.Cita;
 
 public class CitaDto
@@ -13,7 +15,7 @@ public class CitaDto
     // Propiedad calculada para compatibilidad
     public DateTime FechaHora => AppointmentDate.ToDateTime(StartTime);
     public int DuracionMinutos { get; set; }
-    public string Estado { get; set; } = string.Empty;
+    public AppointmentStatus Estado { get; set; }
     public string Motivo { get; set; } = string.Empty;
     public string? Observaciones { get; set; }
     public bool NotificationSent { get; set; }

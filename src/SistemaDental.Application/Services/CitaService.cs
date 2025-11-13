@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using SistemaDental.Application.DTOs.Cita;
 using SistemaDental.Domain.Entities;
+using SistemaDental.Domain.Enums;
 using SistemaDental.Infrastructure.Repositories;
 using SistemaDental.Infrastructure.Services;
 
@@ -98,7 +99,7 @@ public class CitaService : ICitaService
             StartTime = dto.StartTime,
             EndTime = endTime,
             DuracionMinutos = dto.DuracionMinutos,
-            Estado = "scheduled",
+            Estado = AppointmentStatus.Scheduled,
             Motivo = dto.Motivo ?? string.Empty,
             Observaciones = dto.Observaciones,
             FechaCreacion = DateTime.UtcNow
@@ -117,6 +118,23 @@ public class CitaService : ICitaService
 
         var cita = await _unitOfWork.Citas.GetByIdWithRelationsAsync(id, tenantId.Value);
         if (cita == null) return null;
+
+        // Verificar que la cita no esté eliminada o cancelada
+        if (cita.DeletedAt != null)
+            throw new InvalidOperationException("No se puede actualizar una cita eliminada");
+
+        if (cita.Estado == AppointmentStatus.Cancelled)
+            throw new InvalidOperationException("No se puede actualizar una cita cancelada");
+
+        // Verificar que el paciente existe y pertenece al tenant
+        var paciente = await _unitOfWork.Pacientes.GetByIdWithTenantAsync(dto.PacienteId, tenantId.Value);
+        if (paciente == null)
+            throw new InvalidOperationException("Paciente no encontrado");
+
+        // Verificar que el usuario (dentista) existe y pertenece al tenant
+        var usuario = await _unitOfWork.Usuarios.GetByIdAsync(dto.UsuarioId);
+        if (usuario == null || usuario.TenantId != tenantId.Value)
+            throw new InvalidOperationException("Usuario (dentista) no encontrado o no pertenece al tenant");
 
         // Calcular EndTime
         var endTime = dto.StartTime.AddMinutes(dto.DuracionMinutos);
@@ -157,7 +175,7 @@ public class CitaService : ICitaService
         var cita = await _unitOfWork.Citas.GetByIdWithRelationsAsync(id, tenantId.Value);
         if (cita == null || cita.DeletedAt != null) return false;
 
-        cita.Estado = "confirmed";
+        cita.Estado = AppointmentStatus.Confirmed;
         cita.UpdatedAt = DateTime.UtcNow;
 
         await _unitOfWork.Citas.UpdateAsync(cita);
@@ -174,7 +192,7 @@ public class CitaService : ICitaService
         var cita = await _unitOfWork.Citas.GetByIdWithRelationsAsync(id, tenantId.Value);
         if (cita == null || cita.DeletedAt != null) return false;
 
-        cita.Estado = "cancelled";
+        cita.Estado = AppointmentStatus.Cancelled;
         cita.CancelledAt = DateTime.UtcNow;
         cita.UpdatedAt = DateTime.UtcNow;
 

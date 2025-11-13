@@ -141,11 +141,13 @@ public class ApplicationDbContext : DbContext
             // FechaHora es una propiedad calculada, no se mapea directamente
             entity.Ignore(e => e.FechaHora);
             entity.Property(e => e.DuracionMinutos).HasColumnName("duration_minutes").HasDefaultValue(30);
-            // Usamos una conversión a string, y el interceptor se encargará del cast a enum
+            // Mapear el enum AppointmentStatus directamente al enum de PostgreSQL
+            // Usar conversión que convierte a string, y Npgsql manejará el cast al enum
+            // Nota: Esto requiere que el interceptor convierta el string a 'valor'::enum_type en el SQL
             entity.Property(e => e.Estado)
                 .HasConversion(
-                    v => v.ToLower(),
-                    v => v)
+                    v => ConvertAppointmentStatusToString(v),
+                    v => ConvertStringToAppointmentStatus(v))
                 .HasColumnName("status");
             entity.Property(e => e.Motivo).HasColumnName("reason").IsRequired();
             entity.Property(e => e.Observaciones).HasColumnName("notes");
@@ -153,11 +155,28 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.ReminderSent).HasColumnName("reminder_sent").HasDefaultValue(false);
             entity.Property(e => e.CancellationReason).HasColumnName("cancellation_reason");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
-            entity.Property(e => e.FechaCreacion).HasColumnName("created_at");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
-            entity.Property(e => e.CancelledAt).HasColumnName("cancelled_at");
+            // Convertir todos los DateTime a UTC para PostgreSQL
+            entity.Property(e => e.FechaCreacion)
+                .HasColumnName("created_at")
+                .HasConversion(
+                    v => ConvertToUtc(v),
+                    v => ConvertToUtc(v));
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnName("updated_at")
+                .HasConversion(
+                    v => ConvertToUtcNullable(v),
+                    v => ConvertToUtcNullable(v));
+            entity.Property(e => e.CancelledAt)
+                .HasColumnName("cancelled_at")
+                .HasConversion(
+                    v => ConvertToUtcNullable(v),
+                    v => ConvertToUtcNullable(v));
             entity.Property(e => e.CancelledBy).HasColumnName("cancelled_by");
-            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at");
+            entity.Property(e => e.DeletedAt)
+                .HasColumnName("deleted_at")
+                .HasConversion(
+                    v => ConvertToUtcNullable(v),
+                    v => ConvertToUtcNullable(v));
             
             entity.HasOne(e => e.Tenant)
                 .WithMany(t => t.Citas)
@@ -256,7 +275,59 @@ public class ApplicationDbContext : DbContext
                 .WithMany(u => u.Tratamientos)
                 .HasForeignKey(e => e.UsuarioId)
                 .OnDelete(DeleteBehavior.Restrict);
-        });
+            });
+    }
+
+    // Métodos auxiliares para convertir AppointmentStatus a/desde string
+    // Estos métodos son necesarios porque EF Core no puede usar expresiones switch en árboles de expresión
+    private static string ConvertAppointmentStatusToString(AppointmentStatus status)
+    {
+        return status switch
+        {
+            AppointmentStatus.Scheduled => "scheduled",
+            AppointmentStatus.Confirmed => "confirmed",
+            AppointmentStatus.InProgress => "in_progress",
+            AppointmentStatus.Completed => "completed",
+            AppointmentStatus.Cancelled => "cancelled",
+            AppointmentStatus.NoShow => "no_show",
+            _ => "scheduled"
+        };
+    }
+
+    private static AppointmentStatus ConvertStringToAppointmentStatus(string value)
+    {
+        return value switch
+        {
+            "scheduled" => AppointmentStatus.Scheduled,
+            "confirmed" => AppointmentStatus.Confirmed,
+            "in_progress" => AppointmentStatus.InProgress,
+            "completed" => AppointmentStatus.Completed,
+            "cancelled" => AppointmentStatus.Cancelled,
+            "no_show" => AppointmentStatus.NoShow,
+            _ => AppointmentStatus.Scheduled
+        };
+    }
+
+    // Método auxiliar para convertir DateTime a UTC
+    // PostgreSQL requiere que los DateTime sean UTC cuando se escriben a timestamp with time zone
+    private static DateTime ConvertToUtc(DateTime dateTime)
+    {
+        if (dateTime.Kind == DateTimeKind.Utc)
+            return dateTime;
+        
+        if (dateTime.Kind == DateTimeKind.Unspecified)
+            return DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
+        
+        return dateTime.ToUniversalTime();
+    }
+
+    // Método auxiliar para convertir DateTime? a UTC
+    private static DateTime? ConvertToUtcNullable(DateTime? dateTime)
+    {
+        if (!dateTime.HasValue)
+            return null;
+        
+        return ConvertToUtc(dateTime.Value);
     }
 }
 

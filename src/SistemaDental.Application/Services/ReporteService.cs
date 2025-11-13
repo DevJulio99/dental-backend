@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using SistemaDental.Application.DTOs.Reportes;
+using SistemaDental.Domain.Enums;
 using SistemaDental.Infrastructure.Repositories;
 using SistemaDental.Infrastructure.Services;
 
@@ -43,10 +44,10 @@ public class ReporteService : IReporteService
         var reporte = new ReporteCitasDto
         {
             TotalCitas = citas.Count(),
-            CitasPendientes = citas.Count(c => c.Estado == "scheduled"),
-            CitasConfirmadas = citas.Count(c => c.Estado == "confirmed"),
-            CitasCompletadas = citas.Count(c => c.Estado == "completed"),
-            CitasCanceladas = citas.Count(c => c.Estado == "cancelled")
+            CitasPendientes = citas.Count(c => c.Estado == AppointmentStatus.Scheduled),
+            CitasConfirmadas = citas.Count(c => c.Estado == AppointmentStatus.Confirmed),
+            CitasCompletadas = citas.Count(c => c.Estado == AppointmentStatus.Completed),
+            CitasCanceladas = citas.Count(c => c.Estado == AppointmentStatus.Cancelled)
         };
 
         // Agrupar citas por fecha

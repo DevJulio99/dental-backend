@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SistemaDental.Domain.Entities;
+using SistemaDental.Domain.Enums;
 using SistemaDental.Infrastructure.Data;
 using SistemaDental.Infrastructure.Services;
 
@@ -71,7 +72,7 @@ public class CitaRepository : Repository<Cita>, ICitaRepository
         var query = _dbSet
             .Where(c => c.TenantId == tenantId &&
                        c.DeletedAt == null &&
-                       c.Estado != "cancelled" &&
+                       c.Estado != AppointmentStatus.Cancelled &&
                        c.AppointmentDate == date &&
                        c.StartTime < endTime &&
                        c.EndTime > startTime &&
@@ -91,7 +92,7 @@ public class CitaRepository : Repository<Cita>, ICitaRepository
             .Where(c => c.TenantId == tenantId &&
                        c.DeletedAt == null &&
                        c.AppointmentDate == date &&
-                       c.Estado != "cancelled");
+                       c.Estado != AppointmentStatus.Cancelled);
 
         if (usuarioId.HasValue)
         {

@@ -7,13 +7,19 @@ public class CitaCreateDto
     public DateOnly AppointmentDate { get; set; }
     public TimeOnly StartTime { get; set; }
     // Propiedad de compatibilidad - se convierte a AppointmentDate y StartTime
-    public DateTime FechaHora
+    // Si se proporciona FechaHora, tiene prioridad sobre AppointmentDate y StartTime
+    public DateTime? FechaHora
     {
-        get => AppointmentDate.ToDateTime(StartTime);
+        get => AppointmentDate != default && StartTime != default 
+            ? AppointmentDate.ToDateTime(StartTime) 
+            : null;
         set
         {
-            AppointmentDate = DateOnly.FromDateTime(value);
-            StartTime = TimeOnly.FromDateTime(value);
+            if (value.HasValue)
+            {
+                AppointmentDate = DateOnly.FromDateTime(value.Value);
+                StartTime = TimeOnly.FromDateTime(value.Value);
+            }
         }
     }
     public int DuracionMinutos { get; set; } = 30;

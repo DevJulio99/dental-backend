@@ -423,4 +423,24 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
         ModifyCommand(command);
         return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
     }
+
+    // Interceptar comandos de escritura (INSERT, UPDATE, DELETE)
+    public override InterceptionResult<int> NonQueryExecuting(
+        DbCommand command,
+        CommandEventData eventData,
+        InterceptionResult<int> result)
+    {
+        ModifyCommand(command);
+        return base.NonQueryExecuting(command, eventData, result);
+    }
+
+    public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+        DbCommand command,
+        CommandEventData eventData,
+        InterceptionResult<int> result,
+        CancellationToken cancellationToken = default)
+    {
+        ModifyCommand(command);
+        return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+    }
 }
