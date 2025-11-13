@@ -158,10 +158,10 @@ app.UseCors("AllowAll");
 
 // Middleware personalizado
 app.UseMiddleware<TenantMiddleware>();
-app.UseMiddleware<JwtTenantMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<JwtTenantMiddleware>();
 
 app.MapControllers();
 

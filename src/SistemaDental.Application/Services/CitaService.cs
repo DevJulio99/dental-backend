@@ -205,7 +205,11 @@ public class CitaService : ICitaService
     public async Task<IEnumerable<DateTime>> GetAvailableSlotsAsync(DateTime date, Guid? usuarioId = null)
     {
         var tenantId = _tenantService.GetCurrentTenantId();
-        if (!tenantId.HasValue) return Enumerable.Empty<DateTime>();
+        if (!tenantId.HasValue)
+        {
+            _logger.LogWarning("No se pudo obtener TenantId en GetAvailableSlotsAsync");
+            return Enumerable.Empty<DateTime>();
+        }
 
         // Obtener horarios configurados del tenant (por defecto 9:00 - 18:00)
         var startHour = 9;
@@ -217,8 +221,18 @@ public class CitaService : ICitaService
 
         var dateOnly = DateOnly.FromDateTime(date);
         
+        _logger.LogInformation("Buscando citas ocupadas - TenantId: {TenantId}, Fecha: {Fecha}, UsuarioId: {UsuarioId}", 
+            tenantId.Value, dateOnly, usuarioId);
+        
         // Obtener citas ocupadas del día
         var citasOcupadas = await _unitOfWork.Citas.GetOcupadasByDateAsync(tenantId.Value, dateOnly, usuarioId);
+        
+        _logger.LogInformation("Citas ocupadas encontradas: {Cantidad}", citasOcupadas.Count());
+        foreach (var cita in citasOcupadas)
+        {
+            _logger.LogInformation("Cita ocupada - Id: {Id}, Fecha: {Fecha}, Hora: {StartTime}-{EndTime}, Estado: {Estado}, UsuarioId: {UsuarioId}", 
+                cita.Id, cita.AppointmentDate, cita.StartTime, cita.EndTime, cita.Estado, cita.UsuarioId);
+        }
 
         var slots = new List<DateTime>();
         var currentSlot = startDateTime;
@@ -228,6 +242,8 @@ public class CitaService : ICitaService
             var currentTime = TimeOnly.FromDateTime(currentSlot);
             var slotEndTime = currentTime.AddMinutes(slotDuration);
             
+            // Un slot está ocupado si se solapa con alguna cita
+            // Solapamiento: el slot empieza antes de que termine la cita Y termina después de que empiece la cita
             var slotOcupado = citasOcupadas.Any(c =>
                 currentTime < c.EndTime &&
                 slotEndTime > c.StartTime);
@@ -236,10 +252,18 @@ public class CitaService : ICitaService
             {
                 slots.Add(currentSlot);
             }
+            else
+            {
+                _logger.LogDebug("Slot ocupado: {SlotTime} (cita: {CitaStart}-{CitaEnd})", 
+                    currentSlot, 
+                    citasOcupadas.First(c => currentTime < c.EndTime && slotEndTime > c.StartTime).StartTime,
+                    citasOcupadas.First(c => currentTime < c.EndTime && slotEndTime > c.StartTime).EndTime);
+            }
 
             currentSlot = currentSlot.AddMinutes(slotDuration);
         }
 
+        _logger.LogInformation("Slots disponibles generados: {Cantidad}", slots.Count);
         return slots;
     }
 
