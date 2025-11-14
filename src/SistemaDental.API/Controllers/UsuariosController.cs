@@ -95,6 +95,9 @@ public class UsuariosController : ControllerBase
                 return BadRequest(new { message = "El email ya está en uso" });
             }
 
+            // Convertir el string del DTO al enum UserRole
+            var userRole = ConvertStringToUserRole(dto.Rol);
+
             var usuario = new Usuario
             {
                 TenantId = tenantId.Value,
@@ -102,8 +105,8 @@ public class UsuariosController : ControllerBase
                 Apellido = dto.Apellido,
                 Email = dto.Email,
                 PasswordHash = _passwordService.HashPassword(dto.Password),
-                Rol = dto.Rol,
-                Activo = true,
+                Role = userRole, // Usar el enum directamente
+                Status = UserStatus.Active, // Usar el enum directamente
                 FechaCreacion = DateTime.UtcNow,
                 // Campos de perfil profesional
                 ProfessionalLicense = dto.ProfessionalLicense,
@@ -206,6 +209,41 @@ public class UsuariosController : ControllerBase
                 return NotFound(new { message = "Usuario no encontrado" });
             }
 
+            // Verificar si el usuario es administrador (TenantAdmin)
+            var esAdministrador = usuario.Role == UserRole.TenantAdmin;
+
+            // Protección: Si se intenta cambiar el rol de un administrador
+            if (esAdministrador && !string.IsNullOrEmpty(dto.Rol) && dto.Rol != "Admin")
+            {
+                // Verificar que quede al menos un administrador activo después del cambio
+                var administradoresActivos = await _context.Usuarios
+                    .CountAsync(u => u.TenantId == tenantId.Value 
+                        && u.Role == UserRole.TenantAdmin 
+                        && u.Status == UserStatus.Active 
+                        && u.Id != id);
+
+                if (administradoresActivos == 0)
+                {
+                    return BadRequest(new { message = "No se puede cambiar el rol del administrador. Debe existir al menos un administrador activo en el tenant." });
+                }
+            }
+
+            // Protección: Si se intenta desactivar un administrador
+            if (esAdministrador && dto.Activo.HasValue && !dto.Activo.Value)
+            {
+                // Verificar que quede al menos un administrador activo después de desactivar
+                var administradoresActivos = await _context.Usuarios
+                    .CountAsync(u => u.TenantId == tenantId.Value 
+                        && u.Role == UserRole.TenantAdmin 
+                        && u.Status == UserStatus.Active 
+                        && u.Id != id);
+
+                if (administradoresActivos == 0)
+                {
+                    return BadRequest(new { message = "No se puede desactivar el administrador. Debe existir al menos un administrador activo en el tenant." });
+                }
+            }
+
             // Verificar si se está cambiando el email y si ya existe
             if (!string.IsNullOrEmpty(dto.Email) && dto.Email != usuario.Email)
             {
@@ -226,9 +264,11 @@ public class UsuariosController : ControllerBase
             if (!string.IsNullOrEmpty(dto.Apellido))
                 usuario.Apellido = dto.Apellido;
 
+            // Convertir el string del DTO al enum UserRole y asignar directamente
             if (!string.IsNullOrEmpty(dto.Rol))
-                usuario.Rol = dto.Rol;
+                usuario.Role = ConvertStringToUserRole(dto.Rol);
 
+            // Usar el enum UserStatus directamente
             if (dto.Activo.HasValue)
             {
                 // Asignar directamente el enum para evitar problemas con la conversión de mayúsculas/minúsculas.
@@ -298,8 +338,23 @@ public class UsuariosController : ControllerBase
                 return NotFound(new { message = "Usuario no encontrado" });
             }
 
-            // Soft delete: desactivar en lugar de eliminar
-            // Se asigna directamente el enum para asegurar que el valor sea correcto para PostgreSQL.
+            // Protección: Verificar si el usuario es administrador (TenantAdmin)
+            if (usuario.Role == UserRole.TenantAdmin)
+            {
+                // Verificar que quede al menos un administrador activo después de eliminar
+                var administradoresActivos = await _context.Usuarios
+                    .CountAsync(u => u.TenantId == tenantId.Value 
+                        && u.Role == UserRole.TenantAdmin 
+                        && u.Status == UserStatus.Active 
+                        && u.Id != id);
+
+                if (administradoresActivos == 0)
+                {
+                    return BadRequest(new { message = "No se puede eliminar el administrador. Debe existir al menos un administrador activo en el tenant." });
+                }
+            }
+
+            // Soft delete: desactivar en lugar de eliminar (usar enum directamente)
             usuario.Status = UserStatus.Inactive;
             usuario.UpdatedAt = DateTime.UtcNow;
 
@@ -444,6 +499,30 @@ public class UsuariosController : ControllerBase
             return StatusCode(500, new { message = "Error al desbloquear cuenta" });
         }
     }
+
+    /// <summary>
+    /// Convierte un string de rol a UserRole enum.
+    /// Mapea los valores de la propiedad Rol (string) al enum UserRole.
+    /// Acepta tanto valores en español como en inglés.
+    /// </summary>
+    private static UserRole ConvertStringToUserRole(string rol)
+    {
+        return rol switch
+        {
+            // Valores en español
+            "Admin" => UserRole.TenantAdmin,
+            "Odontologo" => UserRole.Dentist,
+            "Asistente" => UserRole.Assistant,
+            "SuperAdmin" => UserRole.SuperAdmin,
+            // Valores en inglés (del frontend)
+            "tenant_admin" => UserRole.TenantAdmin,
+            "dentist" => UserRole.Dentist,
+            "assistant" => UserRole.Assistant,
+            "receptionist" => UserRole.Receptionist,
+            "super_admin" => UserRole.SuperAdmin,
+            _ => UserRole.Assistant
+        };
+    }
 }
 
 public class UsuarioCreateDto
@@ -453,7 +532,7 @@ public class UsuarioCreateDto
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string Rol { get; set; } = string.Empty;
-    
+
     // Campos opcionales de perfil profesional
     public string? ProfessionalLicense { get; set; }
     public string? Specialization { get; set; }

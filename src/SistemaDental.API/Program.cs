@@ -84,9 +84,12 @@ dataSourceBuilder.MapEnum<SistemaDental.Domain.Enums.AppointmentStatus>("appoint
 dataSourceBuilder.MapEnum<SistemaDental.Domain.Enums.ToothStatus>("tooth_status");
 var dataSource = dataSourceBuilder.Build();
 
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
+builder.Services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =>
+{
+    var logger = serviceProvider.GetService<ILogger<SistemaDental.Infrastructure.Data.PostgresEnumInterceptor>>();
     options.UseNpgsql(dataSource)
-           .AddInterceptors(new SistemaDental.Infrastructure.Data.PostgresEnumInterceptor()));
+           .AddInterceptors(new SistemaDental.Infrastructure.Data.PostgresEnumInterceptor(logger));
+});
 
 // Configuración de JWT
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key no configurada");

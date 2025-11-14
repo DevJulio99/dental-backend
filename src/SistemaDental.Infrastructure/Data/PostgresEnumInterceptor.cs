@@ -82,20 +82,20 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
         var cmdText = command.CommandText;
         _logger?.LogDebug("ModifyCommand: Interceptando comando. Tipo: {CommandType}, SQL: {Sql}", command.CommandType, cmdText);
 
+        // Manejar comandos INSERT primero (más específico)
+        if (cmdText.Contains("INSERT INTO", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger?.LogDebug("ModifyCommand: Detectado comando INSERT");
+            ModifyInsertCommand(command);
+            return;
+        }
+
         // Manejar comandos UPDATE
         if (cmdText.Contains("UPDATE", StringComparison.OrdinalIgnoreCase) && 
             cmdText.Contains("SET", StringComparison.OrdinalIgnoreCase))
         {
             _logger?.LogDebug("ModifyCommand: Detectado comando UPDATE");
             ModifyUpdateCommand(command);
-            return;
-        }
-
-        // Manejar comandos INSERT
-        if (cmdText.Contains("INSERT INTO", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger?.LogDebug("ModifyCommand: Detectado comando INSERT");
-            ModifyInsertCommand(command);
             return;
         }
     }
@@ -135,7 +135,7 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
         var columns = columnMatch.Groups[1].Value.Split(',').Select(c => c.Trim()).ToArray();
         _logger?.LogDebug("ModifyInsertCommand: {Count} columnas encontradas: {Columns}", columns.Length, string.Join(", ", columns));
         
-        // Encontrar la sección VALUES
+        // Encontrar la sección VALUES (puede tener RETURNING después)
         var valuesMatch = Regex.Match(originalSql, @"VALUES\s*\(([^)]+)\)", RegexOptions.IgnoreCase);
         if (!valuesMatch.Success)
         {
@@ -143,8 +143,31 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
             return;
         }
 
-        var values = valuesMatch.Groups[1].Value.Split(',').Select(v => v.Trim()).ToArray();
-        _logger?.LogDebug("ModifyInsertCommand: {Count} valores encontrados", values.Length);
+        // Extraer los valores, pero considerar que pueden tener paréntesis anidados
+        var valuesSection = valuesMatch.Groups[1].Value;
+        var values = new List<string>();
+        var currentValue = new System.Text.StringBuilder();
+        var depth = 0;
+        
+        foreach (var c in valuesSection)
+        {
+            if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (c == ',' && depth == 0)
+            {
+                values.Add(currentValue.ToString().Trim());
+                currentValue.Clear();
+                continue;
+            }
+            currentValue.Append(c);
+        }
+        if (currentValue.Length > 0)
+        {
+            values.Add(currentValue.ToString().Trim());
+        }
+        
+        var valuesArray = values.ToArray();
+        _logger?.LogDebug("ModifyInsertCommand: {Count} valores encontrados", valuesArray.Length);
         
         // Log de todos los parámetros disponibles
         _logger?.LogDebug("ModifyInsertCommand: Parámetros disponibles ({Count}):", command.Parameters.Count);
@@ -155,10 +178,10 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
         }
         
         // Procesar cada columna que necesita conversión a enum
-        var modifiedValues = values.ToArray();
+        var modifiedValues = valuesArray.ToArray();
         var parametersToRemove = new List<int>();
         
-        for (int colIdx = 0; colIdx < columns.Length && colIdx < values.Length; colIdx++)
+        for (int colIdx = 0; colIdx < columns.Length && colIdx < modifiedValues.Length; colIdx++)
         {
             var columnName = columns[colIdx].ToLower();
             
@@ -170,7 +193,7 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
             _logger?.LogDebug("ModifyInsertCommand: Columna {ColumnName} necesita conversión a {EnumType}", columnName, enumType);
 
             // Obtener el placeholder del parámetro en el SQL
-            var paramPlaceholder = values[colIdx].Trim();
+            var paramPlaceholder = modifiedValues[colIdx].Trim();
             
             // Npgsql usa nombres sin @ en la colección (p0, p1) pero con @ en el SQL (@p0, @p1)
             var paramNameWithoutAt = paramPlaceholder.StartsWith("@") 
@@ -183,18 +206,43 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
             int paramIndex = -1;
             DbParameter? foundParam = null;
             
-            // Intentar con el nombre sin @
+            // Extraer el número del parámetro (p0, p1, @p0, @p1, etc.)
+            var paramNumberMatch = Regex.Match(paramNameWithoutAt, @"p(\d+)", RegexOptions.IgnoreCase);
+            int? paramNumber = null;
+            if (paramNumberMatch.Success)
+            {
+                paramNumber = int.Parse(paramNumberMatch.Groups[1].Value);
+                _logger?.LogDebug("ModifyInsertCommand: Número de parámetro extraído: {ParamNumber}", paramNumber);
+            }
+            
+            // Primero intentar con el nombre exacto
             for (int i = 0; i < command.Parameters.Count; i++)
             {
                 var param = command.Parameters[i];
-                // Comparar sin distinguir mayúsculas/minúsculas y sin importar si tiene @ o no
                 var paramNameNormalized = param.ParameterName.TrimStart('@');
                 if (paramNameWithoutAt.Equals(paramNameNormalized, StringComparison.OrdinalIgnoreCase))
                 {
                     paramIndex = i;
                     foundParam = param;
-                    _logger?.LogDebug("ModifyInsertCommand: Parámetro encontrado en índice {Index} con nombre {Name}", i, param.ParameterName);
+                    _logger?.LogDebug("ModifyInsertCommand: Parámetro encontrado en índice {Index} por nombre", i);
                     break;
+                }
+            }
+            
+            // Si no se encontró por nombre y tenemos el número, buscar por número
+            if (foundParam == null && paramNumber.HasValue)
+            {
+                for (int i = 0; i < command.Parameters.Count; i++)
+                {
+                    var param = command.Parameters[i];
+                    var paramNumMatch = Regex.Match(param.ParameterName, @"(\d+)");
+                    if (paramNumMatch.Success && int.Parse(paramNumMatch.Groups[1].Value) == paramNumber.Value)
+                    {
+                        paramIndex = i;
+                        foundParam = param;
+                        _logger?.LogDebug("ModifyInsertCommand: Parámetro encontrado en índice {Index} por número {Number}", i, paramNumber.Value);
+                        break;
+                    }
                 }
             }
             
