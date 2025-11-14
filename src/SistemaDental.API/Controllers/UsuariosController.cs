@@ -98,6 +98,22 @@ public class UsuariosController : ControllerBase
             // Convertir el string del DTO al enum UserRole
             var userRole = ConvertStringToUserRole(dto.Rol);
 
+            // Validación: Solo SuperAdmin puede crear usuarios con rol SuperAdmin
+            var currentUserIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var isCurrentUserSuperAdmin = false;
+            
+            if (!string.IsNullOrEmpty(currentUserIdClaim) && Guid.TryParse(currentUserIdClaim, out var currentUserId))
+            {
+                var currentUser = await _context.Usuarios
+                    .FirstOrDefaultAsync(u => u.Id == currentUserId);
+                isCurrentUserSuperAdmin = currentUser?.Role == UserRole.SuperAdmin;
+            }
+
+            if (userRole == UserRole.SuperAdmin && !isCurrentUserSuperAdmin)
+            {
+                return Forbid("Solo un SuperAdmin puede crear usuarios con rol SuperAdmin");
+            }
+
             var usuario = new Usuario
             {
                 TenantId = tenantId.Value,
@@ -266,7 +282,28 @@ public class UsuariosController : ControllerBase
 
             // Convertir el string del DTO al enum UserRole y asignar directamente
             if (!string.IsNullOrEmpty(dto.Rol))
-                usuario.Role = ConvertStringToUserRole(dto.Rol);
+            {
+                var newRole = ConvertStringToUserRole(dto.Rol);
+                
+                // Validación: Solo SuperAdmin puede asignar rol SuperAdmin
+                var currentUserRoleClaim = User.FindFirst(ClaimTypes.Role)?.Value;
+                var currentUserIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var isCurrentUserSuperAdmin = false;
+                
+                if (!string.IsNullOrEmpty(currentUserIdClaim) && Guid.TryParse(currentUserIdClaim, out var currentUserId))
+                {
+                    var currentUser = await _context.Usuarios
+                        .FirstOrDefaultAsync(u => u.Id == currentUserId);
+                    isCurrentUserSuperAdmin = currentUser?.Role == UserRole.SuperAdmin;
+                }
+
+                if (newRole == UserRole.SuperAdmin && !isCurrentUserSuperAdmin)
+                {
+                    return Forbid("Solo un SuperAdmin puede asignar el rol SuperAdmin a otros usuarios");
+                }
+
+                usuario.Role = newRole;
+            }
 
             // Usar el enum UserStatus directamente
             if (dto.Activo.HasValue)
