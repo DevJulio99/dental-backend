@@ -4,6 +4,7 @@ using Npgsql;
 using System.Data.Common;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Runtime.Serialization;
 
 namespace SistemaDental.Infrastructure.Data;
 
@@ -44,6 +45,32 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
             new Dictionary<string, string> { { "status", "tooth_status" } }
         }
     };
+
+    /// <summary>
+    /// Obtiene el valor de cadena de un enum, priorizando el atributo [EnumMember(Value = "...")].
+    /// Si no existe, recurre a convertir el nombre del miembro a minúsculas.
+    /// </summary>
+    private static string? GetEnumStringValue(object enumValue)
+    {
+        if (enumValue == null) return null;
+
+        var type = enumValue.GetType();
+        if (!type.IsEnum) return enumValue.ToString();
+
+        var memberName = enumValue.ToString();
+        if (string.IsNullOrEmpty(memberName)) return null;
+
+        var memberInfo = type.GetMember(memberName).FirstOrDefault();
+        if (memberInfo == null) return memberName.ToLowerInvariant();
+
+        var enumMemberAttribute = memberInfo.GetCustomAttributes(typeof(EnumMemberAttribute), false)
+                                            .OfType<EnumMemberAttribute>()
+                                            .FirstOrDefault();
+
+        // Si se encuentra el atributo EnumMember, usar su valor.
+        // De lo contrario, usar el nombre del miembro en minúsculas como fallback.
+        return enumMemberAttribute?.Value ?? memberName.ToLowerInvariant();
+    }
 
     private void ModifyCommand(DbCommand command)
     {
@@ -175,10 +202,10 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
             {
                 if (foundParam.Value != null && foundParam.Value != DBNull.Value)
                 {
-                    var paramValue = foundParam.Value.ToString();
+                    var paramValue = GetEnumStringValue(foundParam.Value);
                     if (!string.IsNullOrEmpty(paramValue))
                     {
-                        _logger?.LogInformation("ModifyInsertCommand: Valor del parámetro {ParamName}: {Value}, convirtiendo a enum {EnumType}", 
+                        _logger?.LogInformation("ModifyInsertCommand: Valor del parámetro {ParamName}: {Value} (procesado), convirtiendo a enum {EnumType}", 
                             paramNameWithoutAt, paramValue, enumType);
                         // Escapar el valor para evitar SQL injection
                         var escapedValue = paramValue.Replace("'", "''");
@@ -354,10 +381,10 @@ public class PostgresEnumInterceptor : DbCommandInterceptor
 
                 if (foundParam != null && foundParam.Value != null && foundParam.Value != DBNull.Value)
                 {
-                    var paramValue = foundParam.Value.ToString();
+                    var paramValue = GetEnumStringValue(foundParam.Value);
                     if (!string.IsNullOrEmpty(paramValue))
                     {
-                        _logger?.LogInformation("ModifyUpdateCommand: Valor del parámetro: {Value}, convirtiendo a enum {EnumType}", paramValue, enumType);
+                        _logger?.LogInformation("ModifyUpdateCommand: Valor del parámetro: {Value} (procesado), convirtiendo a enum {EnumType}", paramValue, enumType);
                         // Escapar el valor para evitar SQL injection
                         var escapedValue = paramValue.Replace("'", "''");
                         // Usar la sintaxis correcta de PostgreSQL: 'valor'::enum_type

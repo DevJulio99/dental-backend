@@ -104,12 +104,16 @@ public class PacienteService : IPacienteService
         var paciente = await _unitOfWork.Pacientes.GetByIdWithTenantAsync(id, tenantId.Value);
         if (paciente == null) return null;
 
+        // Normalizar las fechas existentes a UTC antes de actualizar.
+        // EF Core carga las fechas desde la BD con Kind 'Unspecified'.
+        // Al mezclar con 'DateTime.UtcNow' (que es Kind 'Utc'), Npgsql genera un error.
+        paciente.FechaCreacion = DateTime.SpecifyKind(paciente.FechaCreacion, DateTimeKind.Utc);
+
         paciente.FirstName = dto.FirstName;
         paciente.LastName = dto.LastName;
         paciente.TipoDocumento = dto.TipoDocumento;
         paciente.DniPasaporte = dto.DniPasaporte;
-        paciente.FechaNacimiento = dto.FechaNacimiento;
-        paciente.Genero = dto.Genero;
+        paciente.FechaNacimiento = DateTime.SpecifyKind(dto.FechaNacimiento, DateTimeKind.Utc);
         paciente.Telefono = dto.Telefono;
         paciente.TelefonoAlternativo = dto.TelefonoAlternativo;
         paciente.Email = dto.Email;
@@ -140,11 +144,13 @@ public class PacienteService : IPacienteService
 
         var paciente = await _unitOfWork.Pacientes.GetByIdWithTenantAsync(id, tenantId.Value);
         if (paciente == null) return false;
+        paciente.FechaCreacion = DateTime.SpecifyKind(paciente.FechaCreacion, DateTimeKind.Utc);
+        paciente.FechaNacimiento = DateTime.SpecifyKind(paciente.FechaNacimiento, DateTimeKind.Utc);
 
         // Soft delete: establecer DeletedAt en lugar de eliminar físicamente
-        paciente.DeletedAt = DateTime.UtcNow;
-        paciente.UpdatedAt = DateTime.UtcNow;
-        
+        paciente.DeletedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
+        paciente.UpdatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
+
         await _unitOfWork.Pacientes.UpdateAsync(paciente);
         await _unitOfWork.SaveChangesAsync();
 

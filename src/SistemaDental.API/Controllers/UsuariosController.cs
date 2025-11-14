@@ -230,7 +230,10 @@ public class UsuariosController : ControllerBase
                 usuario.Rol = dto.Rol;
 
             if (dto.Activo.HasValue)
-                usuario.Activo = dto.Activo.Value;
+            {
+                // Asignar directamente el enum para evitar problemas con la conversión de mayúsculas/minúsculas.
+                usuario.Status = dto.Activo.Value ? UserStatus.Active : UserStatus.Inactive;
+            }
 
             // Actualizar campos de perfil profesional
             if (dto.ProfessionalLicense != null)
@@ -296,7 +299,8 @@ public class UsuariosController : ControllerBase
             }
 
             // Soft delete: desactivar en lugar de eliminar
-            usuario.Activo = false;
+            // Se asigna directamente el enum para asegurar que el valor sea correcto para PostgreSQL.
+            usuario.Status = UserStatus.Inactive;
             usuario.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();

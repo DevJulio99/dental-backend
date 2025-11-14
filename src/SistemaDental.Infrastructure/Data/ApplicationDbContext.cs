@@ -67,18 +67,11 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Email).HasColumnName("email").IsRequired().HasMaxLength(200);
             entity.Property(e => e.PasswordHash).HasColumnName("password_hash").IsRequired().HasMaxLength(500);
             // Mapear UserRole con conversión explícita a snake_case para PostgreSQL
-            entity.Property(e => e.Role)
-                .HasConversion(
-                    v => ConvertUserRoleToString(v),
-                    v => ConvertStringToUserRole(v))
-                .HasColumnName("role")
-                .IsRequired();
+            // Se elimina .HasConversion para permitir que PostgresEnumInterceptor funcione correctamente.
+            entity.Property(e => e.Role).HasColumnName("role").IsRequired();
             // Mapear UserStatus con conversión explícita a snake_case para PostgreSQL
-            entity.Property(e => e.Status)
-                .HasConversion(
-                    v => ConvertUserStatusToString(v),
-                    v => ConvertStringToUserStatus(v))
-                .HasColumnName("status");
+            // Se elimina .HasConversion para permitir que PostgresEnumInterceptor funcione correctamente.
+            entity.Property(e => e.Status).HasColumnName("status");
             entity.Property(e => e.FechaCreacion).HasColumnName("created_at");
             entity.Property(e => e.UltimoAcceso).HasColumnName("last_login_at");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
@@ -173,12 +166,9 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.DuracionMinutos).HasColumnName("duration_minutes").HasDefaultValue(30);
             // Mapear el enum AppointmentStatus directamente al enum de PostgreSQL
             // Usar conversión que convierte a string, y Npgsql manejará el cast al enum
-            // Nota: Esto requiere que el interceptor convierta el string a 'valor'::enum_type en el SQL
-            entity.Property(e => e.Estado)
-                .HasConversion(
-                    v => ConvertAppointmentStatusToString(v),
-                    v => ConvertStringToAppointmentStatus(v))
-                .HasColumnName("status");
+            // Nota: Se elimina .HasConversion para que el interceptor se encargue de la conversión.
+            // El interceptor convierte el valor del enum a su representación de string correcta.
+            entity.Property(e => e.Estado).HasColumnName("status");
             entity.Property(e => e.Motivo).HasColumnName("reason").IsRequired();
             entity.Property(e => e.Observaciones).HasColumnName("notes");
             entity.Property(e => e.NotificationSent).HasColumnName("notification_sent").HasDefaultValue(false);
@@ -235,12 +225,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.PacienteId).HasColumnName("patient_id");
             entity.Property(e => e.NumeroDiente).HasColumnName("tooth_number");
             // Usamos una conversión a string, y el interceptor se encargará del cast a enum
-            entity.Property(e => e.Estado)
-                .HasConversion(
-                    v => v.ToLower(),
-                    v => v)
-                .HasColumnName("status")
-                .IsRequired();
+            entity.Property(e => e.Estado).HasColumnName("status").IsRequired();
             entity.Property(e => e.Observaciones).HasColumnName("notes");
             entity.Property(e => e.FechaRegistro).HasColumnName("record_date");
             // FechaRegistroDateTime es una propiedad calculada
