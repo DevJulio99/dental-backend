@@ -224,7 +224,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.TenantId).HasColumnName("tenant_id");
             entity.Property(e => e.PacienteId).HasColumnName("patient_id");
             entity.Property(e => e.NumeroDiente).HasColumnName("tooth_number");
-            // Usamos una conversión a string, y el interceptor se encargará del cast a enum
+            // El enum se mapea directamente - PostgresEnumInterceptor se encargará de la conversión
             entity.Property(e => e.Estado).HasColumnName("status").IsRequired();
             entity.Property(e => e.Observaciones).HasColumnName("notes");
             entity.Property(e => e.FechaRegistro).HasColumnName("record_date");
@@ -232,6 +232,9 @@ public class ApplicationDbContext : DbContext
             entity.Ignore(e => e.FechaRegistroDateTime);
             entity.Property(e => e.UsuarioId).HasColumnName("recorded_by").IsRequired();
             entity.Property(e => e.ClinicalRecordId).HasColumnName("clinical_record_id");
+            entity.Property(e => e.CreatedAt)
+                .HasColumnName("created_at")
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
             
             entity.HasOne(e => e.Tenant)
                 .WithMany()
