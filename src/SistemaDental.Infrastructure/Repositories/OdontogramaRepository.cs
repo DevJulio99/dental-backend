@@ -66,6 +66,7 @@ public class OdontogramaRepository : Repository<Odontograma>, IOdontogramaReposi
                        o.PacienteId == pacienteId && 
                        o.NumeroDiente == numeroDiente)
             .OrderByDescending(o => o.FechaRegistro)
+            .ThenByDescending(o => o.CreatedAt)
             .FirstOrDefaultAsync();
     }
 
@@ -77,6 +78,7 @@ public class OdontogramaRepository : Repository<Odontograma>, IOdontogramaReposi
                        o.PacienteId == pacienteId && 
                        o.NumeroDiente == numeroDiente)
             .OrderByDescending(o => o.FechaRegistro)
+            .ThenByDescending(o => o.CreatedAt)
             .FirstOrDefaultAsync();
     }
 
@@ -99,6 +101,7 @@ public class OdontogramaRepository : Repository<Odontograma>, IOdontogramaReposi
                                       31, 32, 33, 34, 35, 36, 37, 38, 41, 42, 43, 44, 45, 46, 47, 48 };
 
         // Obtener todos los registros hasta la fecha especificada en una sola consulta
+        // Ordenados correctamente para tomar el más reciente de cada diente
         var registros = await _dbSet
             .Include(o => o.Usuario)
             .Where(o => o.TenantId == tenantId && 
@@ -110,6 +113,7 @@ public class OdontogramaRepository : Repository<Odontograma>, IOdontogramaReposi
             .ToListAsync();
 
         // Agrupar por número de diente y tomar el más reciente de cada uno
+        // Como ya están ordenados, el FirstOrDefault() tomará el más reciente
         var resultado = new Dictionary<int, Odontograma?>();
         
         foreach (var numeroDiente in dientes)
