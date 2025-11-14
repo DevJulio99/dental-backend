@@ -95,6 +95,9 @@ public class UsuariosController : ControllerBase
                 return BadRequest(new { message = "El email ya está en uso" });
             }
 
+            // Convertir el string del DTO al enum UserRole
+            var userRole = ConvertStringToUserRole(dto.Rol);
+
             var usuario = new Usuario
             {
                 TenantId = tenantId.Value,
@@ -102,8 +105,8 @@ public class UsuariosController : ControllerBase
                 Apellido = dto.Apellido,
                 Email = dto.Email,
                 PasswordHash = _passwordService.HashPassword(dto.Password),
-                Rol = dto.Rol,
-                Activo = true,
+                Role = userRole, // Usar el enum directamente
+                Status = UserStatus.Active, // Usar el enum directamente
                 FechaCreacion = DateTime.UtcNow,
                 // Campos de perfil profesional
                 ProfessionalLicense = dto.ProfessionalLicense,
@@ -261,11 +264,13 @@ public class UsuariosController : ControllerBase
             if (!string.IsNullOrEmpty(dto.Apellido))
                 usuario.Apellido = dto.Apellido;
 
+            // Convertir el string del DTO al enum UserRole y asignar directamente
             if (!string.IsNullOrEmpty(dto.Rol))
-                usuario.Rol = dto.Rol;
+                usuario.Role = ConvertStringToUserRole(dto.Rol);
 
+            // Usar el enum UserStatus directamente
             if (dto.Activo.HasValue)
-                usuario.Activo = dto.Activo.Value;
+                usuario.Status = dto.Activo.Value ? UserStatus.Active : UserStatus.Inactive;
 
             // Actualizar campos de perfil profesional
             if (dto.ProfessionalLicense != null)
@@ -346,8 +351,8 @@ public class UsuariosController : ControllerBase
                 }
             }
 
-            // Soft delete: desactivar en lugar de eliminar
-            usuario.Activo = false;
+            // Soft delete: desactivar en lugar de eliminar (usar enum directamente)
+            usuario.Status = UserStatus.Inactive;
             usuario.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -490,6 +495,30 @@ public class UsuariosController : ControllerBase
             _logger.LogError(ex, "Error al desbloquear cuenta");
             return StatusCode(500, new { message = "Error al desbloquear cuenta" });
         }
+    }
+
+    /// <summary>
+    /// Convierte un string de rol a UserRole enum.
+    /// Mapea los valores de la propiedad Rol (string) al enum UserRole.
+    /// Acepta tanto valores en español como en inglés.
+    /// </summary>
+    private static UserRole ConvertStringToUserRole(string rol)
+    {
+        return rol switch
+        {
+            // Valores en español
+            "Admin" => UserRole.TenantAdmin,
+            "Odontologo" => UserRole.Dentist,
+            "Asistente" => UserRole.Assistant,
+            "SuperAdmin" => UserRole.SuperAdmin,
+            // Valores en inglés (del frontend)
+            "tenant_admin" => UserRole.TenantAdmin,
+            "dentist" => UserRole.Dentist,
+            "assistant" => UserRole.Assistant,
+            "receptionist" => UserRole.Receptionist,
+            "super_admin" => UserRole.SuperAdmin,
+            _ => UserRole.Assistant
+        };
     }
 }
 
