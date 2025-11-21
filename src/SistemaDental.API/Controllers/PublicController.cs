@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SistemaDental.Application.DTOs.ScheduleConfig;
 using SistemaDental.Application.DTOs.Cita;
 using SistemaDental.Application.Services;
 using SistemaDental.Domain.Entities;
@@ -14,17 +15,20 @@ namespace SistemaDental.API.Controllers;
 public class PublicController : ControllerBase
 {
     private readonly ICitaService _citaService;
+    private readonly IScheduleConfigService _scheduleConfigService;
     private readonly ITenantRepository _tenantRepository;
     private readonly ApplicationDbContext _context;
     private readonly ILogger<PublicController> _logger;
 
     public PublicController(
         ICitaService citaService,
+        IScheduleConfigService scheduleConfigService,
         ITenantRepository tenantRepository,
         ApplicationDbContext context,
         ILogger<PublicController> logger)
     {
         _citaService = citaService;
+        _scheduleConfigService = scheduleConfigService;
         _tenantRepository = tenantRepository;
         _context = context;
         _logger = logger;
@@ -92,6 +96,33 @@ public class PublicController : ControllerBase
         }
     }
 
+    [HttpGet("consultorio-horarios")]
+    public async Task<ActionResult<WorkHoursDto>> GetConsultorioHorarios([FromQuery] string subdomain)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(subdomain))
+            {
+                return BadRequest(new { message = "El subdominio es requerido" });
+            }
+
+            var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain);
+            if (tenant == null || !tenant.Activo)
+            {
+                return NotFound(new { message = "Consultorio no encontrado o inactivo" });
+            }
+
+            var workHours = await _scheduleConfigService.GetConsolidatedWorkHoursAsync(tenant.Id);
+
+            return Ok(workHours);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener los horarios consolidados para el subdominio {Subdomain}", subdomain);
+            return StatusCode(500, new { message = "Error al obtener los horarios del consultorio" });
+        }
+    }
+
     [HttpGet("horarios-disponibles")]
     public async Task<ActionResult<IEnumerable<DateTime>>> GetHorariosDisponibles(
         [FromQuery] string subdomain,
@@ -117,6 +148,34 @@ public class PublicController : ControllerBase
             return StatusCode(500, new { message = "Error al obtener horarios" });
         }
     }
+
+    [HttpPost("listarConfiguracionHorarios")]
+    public async Task<ActionResult<IEnumerable<ScheduleConfigDto>>> ListarConfiguracionHorarios([FromBody] ScheduleConfigRequestDto request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.Subdomain))
+            {
+                return BadRequest(new { message = "El subdominio es requerido" });
+            }
+
+            var tenant = await _tenantRepository.GetBySubdomainAsync(request.Subdomain);
+            if (tenant == null || !tenant.Activo)
+            {
+                return NotFound(new { message = "Consultorio no encontrado o inactivo" });
+            }
+
+            var scheduleConfigs = await _scheduleConfigService.GetScheduleAsync(tenant.Id, request.UsuarioId);
+
+            return Ok(scheduleConfigs);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener la configuración de horarios para el subdominio {Subdomain}", request.Subdomain);
+            return StatusCode(500, new { message = "Error al obtener la configuración de horarios" });
+        }
+    }
+
 
     [HttpPost("reservar-cita")]
     public async Task<ActionResult<CitaDto>> ReservarCita(
@@ -275,4 +334,3 @@ public class CitaPublicCreateDto
     public DateTime FechaHora { get; set; }
     public string? Motivo { get; set; }
 }
-

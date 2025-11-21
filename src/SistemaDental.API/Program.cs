@@ -130,6 +130,7 @@ builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<ICitaRepository, CitaRepository>();
 builder.Services.AddScoped<IOdontogramaRepository, OdontogramaRepository>();
 builder.Services.AddScoped<ITratamientoRepository, TratamientoRepository>();
+builder.Services.AddScoped<IScheduleConfigRepository, ScheduleConfigRepository>();
 
 // Servicios de aplicación
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -138,6 +139,7 @@ builder.Services.AddScoped<ICitaService, CitaService>();
 builder.Services.AddScoped<IOdontogramaService, OdontogramaService>();
 builder.Services.AddScoped<ITratamientoService, TratamientoService>();
 builder.Services.AddScoped<IReporteService, ReporteService>();
+builder.Services.AddScoped<IScheduleConfigService, ScheduleConfigService>();
 
 // HttpContextAccessor para acceder al contexto HTTP
 builder.Services.AddHttpContextAccessor();

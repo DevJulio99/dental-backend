@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using SistemaDental.Domain.Entities;
 using SistemaDental.Domain.Enums;
 
@@ -18,6 +17,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Cita> Citas { get; set; }
     public DbSet<Odontograma> Odontogramas { get; set; }
     public DbSet<Tratamiento> Tratamientos { get; set; }
+    public DbSet<ScheduleConfig> ScheduleConfigs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -294,6 +294,40 @@ public class ApplicationDbContext : DbContext
                 .HasForeignKey(e => e.UsuarioId)
                 .OnDelete(DeleteBehavior.Restrict);
             });
+
+        // Configuración de ScheduleConfig - Mapea a tabla 'schedule_config'
+        modelBuilder.Entity<ScheduleConfig>(entity =>
+        {
+            entity.ToTable("schedule_config");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.HasIndex(e => new { e.TenantId, e.UserId, e.DayOfWeek }).IsUnique();
+
+            entity.Property(e => e.TenantId).HasColumnName("tenant_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.DayOfWeek).HasColumnName("day_of_week");
+            entity.Property(e => e.IsWorkingDay).HasColumnName("is_working_day").HasDefaultValue(true);
+            entity.Property(e => e.MorningStartTime).HasColumnName("morning_start_time");
+            entity.Property(e => e.MorningEndTime).HasColumnName("morning_end_time");
+            entity.Property(e => e.AfternoonStartTime).HasColumnName("afternoon_start_time");
+            entity.Property(e => e.AfternoonEndTime).HasColumnName("afternoon_end_time");
+            entity.Property(e => e.AppointmentDuration).HasColumnName("appointment_duration").HasDefaultValue(30);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany() // Un Tenant puede tener muchas configuraciones de horario
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.User)
+                .WithMany() // Un Usuario puede tener muchas configuraciones de horario
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.SetNull); // Si se elimina el usuario, la configuración podría permanecer
+
+
+            });
     }
 
     // Métodos auxiliares para convertir UserRole a/desde string
@@ -398,4 +432,3 @@ public class ApplicationDbContext : DbContext
         return ConvertToUtc(dateTime.Value);
     }
 }
-
