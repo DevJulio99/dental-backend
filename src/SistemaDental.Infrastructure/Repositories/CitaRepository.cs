@@ -56,27 +56,36 @@ public class CitaRepository : Repository<Cita>, ICitaRepository
     public async Task<IEnumerable<Cita>> GetByDateRangeAsync(Guid tenantId, DateOnly startDate, DateOnly endDate)
     {
         return await _dbSet
-            .Include(c => c.Paciente)
-            .Include(c => c.Usuario)
             .Where(c => c.TenantId == tenantId && 
                        c.DeletedAt == null &&
                        c.AppointmentDate >= startDate && 
                        c.AppointmentDate <= endDate)
+            .Include(c => c.Paciente)
+            .Include(c => c.Usuario)
             .OrderBy(c => c.AppointmentDate)
             .ThenBy(c => c.StartTime)
             .ToListAsync();
     }
 
-    public async Task<bool> HasConflictAsync(Guid tenantId, DateOnly date, TimeOnly startTime, TimeOnly endTime, Guid usuarioId, Guid? excludeCitaId = null)
+    public async Task<bool> HasConflictAsync(Guid tenantId, DateOnly date, TimeOnly startTime, TimeOnly endTime, Guid? usuarioId = null, Guid? pacienteId = null, Guid? excludeCitaId = null)
     {
+        if (!usuarioId.HasValue && !pacienteId.HasValue)
+        {
+            throw new ArgumentException("Se debe proporcionar al menos un usuarioId o un pacienteId.");
+        }
+
         var query = _dbSet
             .Where(c => c.TenantId == tenantId &&
                        c.DeletedAt == null &&
                        c.Estado != AppointmentStatus.Cancelled &&
                        c.AppointmentDate == date &&
                        c.StartTime < endTime &&
-                       c.EndTime > startTime &&
-                       c.UsuarioId == usuarioId);
+                       c.EndTime > startTime);
+
+        if (usuarioId.HasValue)
+        {
+            query = query.Where(c => c.UsuarioId == usuarioId.Value);
+        }
 
         if (excludeCitaId.HasValue)
         {
@@ -102,4 +111,3 @@ public class CitaRepository : Repository<Cita>, ICitaRepository
         return await query.ToListAsync();
     }
 }
-

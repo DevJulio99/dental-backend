@@ -79,6 +79,16 @@ public class CitaService : ICitaService
         // Calcular EndTime
         var endTime = dto.StartTime.AddMinutes(dto.DuracionMinutos);
 
+        var conflictoPaciente = await _unitOfWork.Citas.HasConflictAsync(
+            tenantId.Value,
+            dto.AppointmentDate,
+            dto.StartTime,
+            endTime,
+            pacienteId: dto.PacienteId);
+
+        if (conflictoPaciente)
+            throw new InvalidOperationException("El paciente ya tiene otra cita agendada en ese horario.");
+
         // Verificar que no haya conflicto de horario
         var conflicto = await _unitOfWork.Citas.HasConflictAsync(
             tenantId.Value, 
@@ -139,13 +149,24 @@ public class CitaService : ICitaService
         // Calcular EndTime
         var endTime = dto.StartTime.AddMinutes(dto.DuracionMinutos);
 
-        // Verificar conflicto de horario (excluyendo la cita actual)
+        var conflictoPaciente = await _unitOfWork.Citas.HasConflictAsync(
+            tenantId.Value,
+            dto.AppointmentDate,
+            dto.StartTime,
+            endTime,
+            pacienteId: dto.PacienteId,
+            excludeCitaId: id);
+
+        if (conflictoPaciente)
+            throw new InvalidOperationException("El paciente ya tiene otra cita agendada en ese horario.");
+
+        // Verificar conflicto de horario del doctor (excluyendo la cita actual)
         var conflicto = await _unitOfWork.Citas.HasConflictAsync(
             tenantId.Value, 
             dto.AppointmentDate, 
             dto.StartTime, 
             endTime, 
-            dto.UsuarioId, 
+            usuarioId: dto.UsuarioId, 
             id);
 
         if (conflicto)
@@ -309,4 +330,3 @@ public class CitaService : ICitaService
         };
     }
 }
-

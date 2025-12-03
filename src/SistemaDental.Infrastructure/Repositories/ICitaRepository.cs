@@ -9,7 +9,6 @@ public interface ICitaRepository : IRepository<Cita>
     Task<IEnumerable<Cita>> GetByPacienteAsync(Guid tenantId, Guid pacienteId);
     Task<IEnumerable<Cita>> GetByUsuarioAsync(Guid tenantId, Guid usuarioId);
     Task<IEnumerable<Cita>> GetByDateRangeAsync(Guid tenantId, DateOnly startDate, DateOnly endDate);
-    Task<bool> HasConflictAsync(Guid tenantId, DateOnly date, TimeOnly startTime, TimeOnly endTime, Guid usuarioId, Guid? excludeCitaId = null);
+    Task<bool> HasConflictAsync(Guid tenantId, DateOnly date, TimeOnly startTime, TimeOnly endTime, Guid? usuarioId = null, Guid? pacienteId = null, Guid? excludeCitaId = null);
     Task<IEnumerable<Cita>> GetOcupadasByDateAsync(Guid tenantId, DateOnly date, Guid? usuarioId = null);
 }
-
