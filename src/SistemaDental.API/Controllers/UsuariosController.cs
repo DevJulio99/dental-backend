@@ -406,8 +406,8 @@ public class UsuariosController : ControllerBase
         }
     }
 
-    [HttpPost("{id}/change-password")]
-    public async Task<ActionResult> ChangePassword(Guid id, [FromBody] ChangePasswordDto dto)
+    [HttpPost("change-password")]
+    public async Task<ActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
     {
         var tenantId = _tenantService.GetCurrentTenantId();
         if (!tenantId.HasValue)
@@ -422,11 +422,21 @@ public class UsuariosController : ControllerBase
             return Unauthorized();
         }
 
-        // Solo el usuario puede cambiar su propia contraseña, o un Admin puede cambiar cualquier contraseña
         var isAdmin = User.IsInRole("Admin");
+        Guid id;
+
+        if (isAdmin && dto.UserId.HasValue)
+        {
+            id = dto.UserId.Value;
+        }
+        else
+        {
+            id = currentUserId;
+        }
+
         if (!isAdmin && currentUserId != id)
         {
-            return Forbid("Solo puedes cambiar tu propia contraseña");
+            return Forbid("No tienes permiso para cambiar la contraseña de otro usuario.");
         }
 
         try
@@ -438,11 +448,9 @@ public class UsuariosController : ControllerBase
             {
                 return NotFound(new { message = "Usuario no encontrado" });
             }
-
-            // Si no es admin, verificar la contraseña actual
-            if (!isAdmin)
+            if (!isAdmin || (isAdmin && id == currentUserId))
             {
-                if (!_passwordService.VerifyPassword(dto.CurrentPassword, usuario.PasswordHash))
+                if (string.IsNullOrEmpty(dto.CurrentPassword) || !_passwordService.VerifyPassword(dto.CurrentPassword, usuario.PasswordHash))
                 {
                     return BadRequest(new { message = "La contraseña actual es incorrecta" });
                 }
@@ -577,4 +585,3 @@ public class UsuarioCreateDto
     public string? AvatarUrl { get; set; }
     public string? Phone { get; set; }
 }
-
