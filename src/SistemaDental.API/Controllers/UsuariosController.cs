@@ -201,7 +201,6 @@ public class UsuariosController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<UserInfo>> Update(Guid id, [FromBody] UsuarioUpdateDto dto)
     {
         var tenantId = _tenantService.GetCurrentTenantId();
@@ -210,11 +209,22 @@ public class UsuariosController : ControllerBase
             return Unauthorized();
         }
 
+        var currentUserIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(currentUserIdClaim) || !Guid.TryParse(currentUserIdClaim, out var currentUserId))
+        {
+            return Unauthorized();
+        }
+        var isAdmin = User.IsInRole("Admin");
+
+        if (!isAdmin && currentUserId != id)
+        {
+            return Forbid("No tienes permiso para actualizar este usuario.");
+        }
+
         if (!ModelState.IsValid)
         {
             return BadRequest(ModelState);
         }
-
         try
         {
             var usuario = await _context.Usuarios
@@ -225,13 +235,26 @@ public class UsuariosController : ControllerBase
                 return NotFound(new { message = "Usuario no encontrado" });
             }
 
+            if (!string.IsNullOrEmpty(dto.Nombre))
+                usuario.Nombre = dto.Nombre;
+
+            if (!string.IsNullOrEmpty(dto.Apellido))
+                usuario.Apellido = dto.Apellido;
+
+            if (dto.AvatarUrl != null)
+                usuario.AvatarUrl = dto.AvatarUrl;
+
+            if (dto.Phone != null)
+                usuario.Phone = dto.Phone;
+
+            if (isAdmin)
+            {
             // Verificar si el usuario es administrador (TenantAdmin)
             var esAdministrador = usuario.Role == UserRole.TenantAdmin;
 
             // Protección: Si se intenta cambiar el rol de un administrador
             if (esAdministrador && !string.IsNullOrEmpty(dto.Rol) && dto.Rol != "Admin")
             {
-                // Verificar que quede al menos un administrador activo después del cambio
                 var administradoresActivos = await _context.Usuarios
                     .CountAsync(u => u.TenantId == tenantId.Value 
                         && u.Role == UserRole.TenantAdmin 
@@ -247,7 +270,6 @@ public class UsuariosController : ControllerBase
             // Protección: Si se intenta desactivar un administrador
             if (esAdministrador && dto.Activo.HasValue && !dto.Activo.Value)
             {
-                // Verificar que quede al menos un administrador activo después de desactivar
                 var administradoresActivos = await _context.Usuarios
                     .CountAsync(u => u.TenantId == tenantId.Value 
                         && u.Role == UserRole.TenantAdmin 
@@ -273,29 +295,15 @@ public class UsuariosController : ControllerBase
                 usuario.Email = dto.Email;
             }
 
-            // Actualizar campos básicos
-            if (!string.IsNullOrEmpty(dto.Nombre))
-                usuario.Nombre = dto.Nombre;
-
-            if (!string.IsNullOrEmpty(dto.Apellido))
-                usuario.Apellido = dto.Apellido;
-
             // Convertir el string del DTO al enum UserRole y asignar directamente
             if (!string.IsNullOrEmpty(dto.Rol))
             {
                 var newRole = ConvertStringToUserRole(dto.Rol);
-                
-                // Validación: Solo SuperAdmin puede asignar rol SuperAdmin
                 var currentUserRoleClaim = User.FindFirst(ClaimTypes.Role)?.Value;
-                var currentUserIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 var isCurrentUserSuperAdmin = false;
-                
-                if (!string.IsNullOrEmpty(currentUserIdClaim) && Guid.TryParse(currentUserIdClaim, out var currentUserId))
-                {
-                    var currentUser = await _context.Usuarios
-                        .FirstOrDefaultAsync(u => u.Id == currentUserId);
-                    isCurrentUserSuperAdmin = currentUser?.Role == UserRole.SuperAdmin;
-                }
+
+                var currentUser = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == currentUserId);
+                isCurrentUserSuperAdmin = currentUser?.Role == UserRole.SuperAdmin;
 
                 if (newRole == UserRole.SuperAdmin && !isCurrentUserSuperAdmin)
                 {
@@ -321,13 +329,8 @@ public class UsuariosController : ControllerBase
 
             if (dto.Bio != null)
                 usuario.Bio = dto.Bio;
-
-            if (dto.AvatarUrl != null)
-                usuario.AvatarUrl = dto.AvatarUrl;
-
-            if (dto.Phone != null)
-                usuario.Phone = dto.Phone;
-
+            }
+            
             usuario.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
