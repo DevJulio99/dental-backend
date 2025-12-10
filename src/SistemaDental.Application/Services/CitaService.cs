@@ -146,40 +146,49 @@ public class CitaService : ICitaService
         if (usuario == null || usuario.TenantId != tenantId.Value)
             throw new InvalidOperationException("Usuario (dentista) no encontrado o no pertenece al tenant");
 
-        // Calcular EndTime
-        var endTime = dto.StartTime.AddMinutes(dto.DuracionMinutos);
+        var hasTimeChanged = cita.AppointmentDate != dto.AppointmentDate ||
+                             cita.StartTime != dto.StartTime ||
+                             cita.DuracionMinutos != dto.DuracionMinutos ||
+                             cita.UsuarioId != dto.UsuarioId ||
+                             cita.PacienteId != dto.PacienteId;
 
-        var conflictoPaciente = await _unitOfWork.Citas.HasConflictAsync(
-            tenantId.Value,
-            dto.AppointmentDate,
-            dto.StartTime,
-            endTime,
-            pacienteId: dto.PacienteId,
-            excludeCitaId: id);
+        if (hasTimeChanged)
+        {
+            var newEndTime = dto.StartTime.AddMinutes(dto.DuracionMinutos);
 
-        if (conflictoPaciente)
-            throw new InvalidOperationException("El paciente ya tiene otra cita agendada en ese horario.");
+            var conflictoPaciente = await _unitOfWork.Citas.HasConflictAsync(
+                tenantId.Value,
+                dto.AppointmentDate,
+                dto.StartTime,
+                newEndTime,
+                pacienteId: dto.PacienteId,
+                excludeCitaId: id);
 
-        // Verificar conflicto de horario del doctor (excluyendo la cita actual)
-        var conflicto = await _unitOfWork.Citas.HasConflictAsync(
-            tenantId.Value, 
-            dto.AppointmentDate, 
-            dto.StartTime, 
-            endTime, 
-            usuarioId: dto.UsuarioId, 
-            id);
+            if (conflictoPaciente)
+                throw new InvalidOperationException("El paciente ya tiene otra cita agendada en ese horario.");
 
-        if (conflicto)
-            throw new InvalidOperationException("Ya existe una cita en ese horario");
+
+            var conflictoDoctor = await _unitOfWork.Citas.HasConflictAsync(
+                tenantId.Value,
+                dto.AppointmentDate,
+                dto.StartTime,
+                newEndTime,
+                usuarioId: dto.UsuarioId,
+                excludeCitaId: id);
+
+            if (conflictoDoctor)
+                throw new InvalidOperationException("El profesional ya tiene otra cita en ese horario.");
+        }
 
         cita.PacienteId = dto.PacienteId;
         cita.UsuarioId = dto.UsuarioId;
         cita.AppointmentDate = dto.AppointmentDate;
         cita.StartTime = dto.StartTime;
-        cita.EndTime = endTime;
+        cita.EndTime = dto.StartTime.AddMinutes(dto.DuracionMinutos);
         cita.DuracionMinutos = dto.DuracionMinutos;
         cita.Motivo = dto.Motivo ?? string.Empty;
         cita.Observaciones = dto.Observaciones;
+        cita.Estado = dto.Estado;
         cita.UpdatedAt = DateTime.UtcNow;
 
         await _unitOfWork.Citas.UpdateAsync(cita);

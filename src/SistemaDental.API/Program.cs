@@ -13,6 +13,7 @@ using SistemaDental.Infrastructure.Repositories;
 using SistemaDental.Infrastructure.Services;
 using SistemaDental.API.Middleware;
 using System.Text;
+using SistemaDental.API.BackgroundServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -146,6 +147,8 @@ builder.Services.AddHttpContextAccessor();
 
 // Validadores FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<PacienteCreateDtoValidator>();
+//servicio en segundo plano para actualizar estado de citas
+builder.Services.AddHostedService<CitaStatusUpdateService>();
 
 // Logging
 builder.Services.AddLogging();

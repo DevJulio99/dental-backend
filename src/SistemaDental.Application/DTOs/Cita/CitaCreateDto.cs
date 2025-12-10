@@ -1,3 +1,5 @@
+using SistemaDental.Domain.Enums;
+
 namespace SistemaDental.Application.DTOs.Cita;
 
 public class CitaCreateDto
@@ -25,5 +27,5 @@ public class CitaCreateDto
     public int DuracionMinutos { get; set; } = 30;
     public string Motivo { get; set; } = string.Empty; // Requerido en BD
     public string? Observaciones { get; set; }
+    public AppointmentStatus Estado { get; set; } = AppointmentStatus.Scheduled;
 }
-
