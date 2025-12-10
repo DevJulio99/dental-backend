@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using SistemaDental.Application.DTOs.Cita;
 using SistemaDental.Domain.Entities;
 using SistemaDental.Domain.Enums;
 using SistemaDental.Infrastructure.Repositories;
 using SistemaDental.Infrastructure.Services;
+using System.Security.Claims;
 
 namespace SistemaDental.Application.Services;
 
@@ -12,15 +14,18 @@ public class CitaService : ICitaService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ITenantService _tenantService;
     private readonly ILogger<CitaService> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public CitaService(
         IUnitOfWork unitOfWork,
         ITenantService tenantService,
-        ILogger<CitaService> logger)
+        ILogger<CitaService> logger,
+        IHttpContextAccessor httpContextAccessor)
     {
         _unitOfWork = unitOfWork;
         _tenantService = tenantService;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<CitaDto?> GetByIdAsync(Guid id)
@@ -39,8 +44,27 @@ public class CitaService : ICitaService
         var tenantId = _tenantService.GetCurrentTenantId();
         if (!tenantId.HasValue) return Enumerable.Empty<CitaDto>();
 
-        var citas = await _unitOfWork.Citas.GetByTenantAsync(tenantId.Value);
-        return citas.Select(MapToDto);
+        var user = _httpContextAccessor.HttpContext?.User;
+        if (user == null) return Enumerable.Empty<CitaDto>();
+
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userIdClaim, out var usuarioId))
+        {
+            return Enumerable.Empty<CitaDto>();
+        }
+
+        IEnumerable<Cita> citas;
+
+        if (user.IsInRole("Admin"))
+        {
+            citas = await _unitOfWork.Citas.GetByTenantAsync(tenantId.Value);
+        }
+        else
+        {
+            citas = await _unitOfWork.Citas.GetByUsuarioAsync(tenantId.Value, usuarioId);
+        }
+
+        return citas.Select(MapToDto).OrderByDescending(c => c.FechaHora);
     }
 
     public async Task<IEnumerable<CitaDto>> GetByDateRangeAsync(DateTime startDate, DateTime endDate)

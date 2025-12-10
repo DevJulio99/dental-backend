@@ -47,6 +47,8 @@ public class CitaRepository : Repository<Cita>, ICitaRepository
     public async Task<IEnumerable<Cita>> GetByUsuarioAsync(Guid tenantId, Guid usuarioId)
     {
         return await _dbSet
+            .Include(c => c.Paciente)
+            .Include(c => c.Usuario)
             .Where(c => c.TenantId == tenantId && c.UsuarioId == usuarioId && c.DeletedAt == null)
             .OrderByDescending(c => c.AppointmentDate)
             .ThenBy(c => c.StartTime)
